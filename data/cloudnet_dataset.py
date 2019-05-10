@@ -2,14 +2,13 @@ import csv
 from math import cos, sin
 import numpy as np
 import os
+import pickle
 
 from PIL import Image
-import plyfile
 import torch
+import torchvision.transforms as transforms
 
 from data.base_dataset import BaseDataset, get_posenet_transform
-
-DATASET_PATH = '/storage/group/hodl4cv/lopc/driving_project/episode_%03d'
 
 def euler_to_quaternion(theta, phi, psi):
     '''
@@ -26,7 +25,7 @@ def euler_to_quaternion(theta, phi, psi):
 class CloudNetDataset(BaseDataset):
     def initialize(self, opt):
         self.opt = opt
-        self.root = DATASET_PATH % int(opt.dataroot)
+        self.root = opt.dataroot
         driving_data = os.path.join(self.root, 'driving_data.csv')
 
         # select the folder corresponding to the right input type
@@ -36,15 +35,12 @@ class CloudNetDataset(BaseDataset):
         elif self.opt.input_type == 'depth':
             file_path = os.path.join('CameraDepth0', 'image_%s.png')
         else: # point clouds
-            file_path = os.path.join('PointCloudLocal0', 'point_cloud_%s.ply')
-
-        # check if the input data exist
-        if not os.path.isfile(os.path.join(self.root, file_path % '00000')):
-            raise ValueError('No available data of type %s' % self.opt.input_type)
+            file_path = os.path.join('PointCloudLocal1', 'point_cloud_%s.pk')
 
         self.A_paths = []
         self.A_poses = []
-        # read csv file
+
+        # extract driving data
         print('Extracting data from %s...' % driving_data, end='\t')
         with open(driving_data, 'r') as f:
             reader = csv.DictReader(f)
@@ -65,7 +61,7 @@ class CloudNetDataset(BaseDataset):
         A_path = self.A_paths[index % self.A_size]
         A_pose = self.A_poses[index % self.A_size]
 
-        A = self.transform(A_path)
+        A = self.extract_file(A_path)
 
         return {'A': A, 'B': A_pose, 'A_paths': A_path}
 
@@ -75,14 +71,29 @@ class CloudNetDataset(BaseDataset):
     def name(self):
         return 'CloudNetDataset'
 
-    def transform(self, path):
+    def extract_file(self, path):
+        '''
+        extract the file in location [path] and transform it to make it Pytorch-compatible
+        '''
         if self.opt.input_type == 'rgb':
             img = Image.open(path).convert('RGB')
             return get_posenet_transform(self.opt, np.zeros((256,256,3)))(img)
 
         if self.opt.input_type == 'point_cloud':
-            data = plyfile.PlyData.read(path)['vertex']
-            xyz = np.c_[data['x'], data['y'], data['z']]
-            xyz = xyz[:2]
-            return torch.from_numpy(xyz.T)
+            with open(path, 'rb') as f:
+                data = pickle.load(f)
+            img = data[:224*224,:3].T.reshape((3,224,224))
+            return torch.from_numpy(img)
+
         raise NotImplementedError('CloudNet does not accept this type of data for now: %s' % opt.input_type)
+
+# def get_cloudnet_transform(opt, mean_image):
+#     transform_list = []
+# #    transform_list.append(transforms.Resize(opt.loadSize, Image.BICUBIC))
+#     # transform_list.append(transforms.Lambda(
+#     #     lambda img: __subtract_mean(img, mean_image)))
+#     # transform_list.append(transforms.Lambda(
+#     #     lambda img: __crop_image(img, opt.fineSize, opt.isTrain)))
+#     transform_list.append(transforms.Lambda(
+#         lambda img: torch.from_numpy(img)))
+#     return transforms.Compose(transform_list)
