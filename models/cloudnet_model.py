@@ -1,8 +1,12 @@
+from collections import OrderedDict
+from math import pi
+
 import torch
 import torch.nn.functional as F
 
 from . import networks
 from .base_model import BaseModel
+from util.geometry import geometric_loss
 
 class CloudNetModel(BaseModel):
     def name(self):
@@ -19,6 +23,7 @@ class CloudNetModel(BaseModel):
             opt.model,
             init_from=self.pretrained_weights,
             isTest=not self.isTrain,
+            f_size=opt.fineSize,
             gpu_ids=self.gpu_ids
         )
 
@@ -28,7 +33,8 @@ class CloudNetModel(BaseModel):
         if self.isTrain:
             self.old_lr = opt.lr
             # define loss functions
-            self.criterion = torch.nn.MSELoss()
+            self.criterion = geometric_loss
+            self.mse = torch.nn.MSELoss()
 
             # initialize optimizers
             self.schedulers = []
@@ -46,20 +52,24 @@ class CloudNetModel(BaseModel):
         # print('-----------------------------------------------')
 
     def forward(self):
-        self.pred_B = self.netG(self.input_A)
+        self.pred_Y = self.netG(self.input_X)
 
     def backward(self):
         self.loss_G = 0
         self.loss_pos = 0
         self.loss_ori = 0
         loss_weights = [0.3, 0.3, 1]
-        for l, w in enumerate(loss_weights):
-            mse_pos = self.criterion(self.pred_B[2*l], self.input_B[:, 0:3])
-            ori_gt = F.normalize(self.input_B[:, 3:], p=2, dim=1)
-            mse_ori = self.criterion(self.pred_B[2*l+1], ori_gt)
-            self.loss_G += (mse_pos + mse_ori * self.opt.beta) * w
+        for i, w in enumerate(loss_weights):
+            # position loss
+            mse_pos = self.mse(self.pred_Y[i][:,:3], self.input_Y[:,0:3])
+            # orientation loss
+            ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
+            mse_ori = self.mse(self.pred_Y[i][:,3:], ori_gt)
+
             self.loss_pos += mse_pos.item() * w
-            self.loss_ori += mse_ori.item() * w * self.opt.beta
+            self.loss_ori += mse_ori.item() * w * 180 / pi
+            loss = self.criterion(self.input_X.reshape(-1,3,self.opt.fineSize**2), self.input_Y, self.pred_Y[i])
+            self.loss_G += w * loss
         self.loss_G.backward()
 
     def optimize_parameters(self):
@@ -68,3 +78,16 @@ class CloudNetModel(BaseModel):
         self.backward()
         self.optimizer_G.step()
 
+    def get_current_errors(self):
+        if self.opt.isTrain:
+            return OrderedDict([('pos_err', self.loss_pos),
+                                ('ori_err', self.loss_ori),
+                                ('geom_err', self.loss_G.item()),
+                                ])
+
+        raise NotImplementedError
+        pos_err = torch.dist(self.pred_Y[0], self.input_Y[:, 0:3])
+        ori_gt = F.normalize(self.input_Y[:, 3:], p=2, dim=1)
+        abs_distance = torch.abs((ori_gt.mul(self.pred_Y[1])).sum())
+        ori_err = 2*180/numpy.pi * torch.acos(abs_distance)
+        return [pos_err.item(), ori_err.item()]
