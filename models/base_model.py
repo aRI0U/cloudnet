@@ -16,9 +16,9 @@ class BaseModel():
         self.Tensor = torch.cuda.FloatTensor if self.gpu_ids else torch.Tensor
         self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
         # define tensors
-        self.input_A = self.Tensor(opt.batchSize, opt.input_nc,
+        self.input_X = self.Tensor(opt.batchSize, opt.input_nc,
                                    opt.fineSize, opt.fineSize)
-        self.input_B = self.Tensor(opt.batchSize, opt.output_nc)
+        self.input_Y = self.Tensor(opt.batchSize, opt.output_nc)
 
         # load pretrained model
         self.pretrained_weights = None
@@ -29,12 +29,12 @@ class BaseModel():
                 self.pretrained_weights = pickle.load(f, encoding='bytes')
             print('Done')
 
-    def set_input(self, input):
-        input_A = input['A']
-        input_B = input['B']
-        self.image_paths = input['A_paths']
-        self.input_A.resize_(input_A.size()).copy_(input_A)
-        self.input_B.resize_(input_B.size()).copy_(input_B)
+    def set_input(self, batch):
+        input_X = batch['X']
+        input_Y = batch['Y']
+        self.image_paths = batch['X_paths']
+        self.input_X.resize_(input_X.size()).copy_(input_X)
+        self.input_Y.resize_(input_Y.size()).copy_(input_Y)
 
     def forward(self):
         pass
@@ -61,23 +61,24 @@ class BaseModel():
             return OrderedDict([('pos_err', self.loss_pos),
                                 ('ori_err', self.loss_ori),
                                 ])
+            # return OrderedDict([('loss_G', self.loss_G.item())])
 
-        pos_err = torch.dist(self.pred_B[0], self.input_B[:, 0:3])
-        ori_gt = F.normalize(self.input_B[:, 3:], p=2, dim=1)
-        abs_distance = torch.abs((ori_gt.mul(self.pred_B[1])).sum())
+        pos_err = torch.dist(self.pred_Y[0], self.input_Y[:, 0:3])
+        ori_gt = F.normalize(self.input_Y[:, 3:], p=2, dim=1)
+        abs_distance = torch.abs((ori_gt.mul(self.pred_Y[1])).sum())
         ori_err = 2*180/numpy.pi * torch.acos(abs_distance)
         return [pos_err.item(), ori_err.item()]
 
 
     def get_current_pose(self):
-        return numpy.concatenate((self.pred_B[0].data[0].cpu().numpy(),
-                                  self.pred_B[1].data[0].cpu().numpy()))
+        return numpy.concatenate((self.pred_Y[0].data[0].cpu().numpy(),
+                                  self.pred_Y[1].data[0].cpu().numpy()))
 
     def get_current_visuals(self):
-        input_A = util.tensor2im(self.input_A.data)
-        # pred_B = util.tensor2im(self.pred_B.data)
-        # input_B = util.tensor2im(self.input_B.data)
-        return OrderedDict([('input_A', input_A)])
+        input_X = util.tensor2im(self.input_X.data)
+        # pred_Y = util.tensor2im(self.pred_Y.data)
+        # input_Y = util.tensor2im(self.input_Y.data)
+        return OrderedDict([('input_X', input_X)])
 
     def save(self, label):
         self.save_network(self.netG, 'G', label, self.gpu_ids)

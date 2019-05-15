@@ -33,7 +33,7 @@ class UnalignedPoseNetDataset(BaseDataset):
 
         A = self.transform(A_img)
 
-        return {'A': A, 'B': A_pose, 'A_paths': A_path}
+        return {'X': A, 'Y': A_pose, 'X_paths': A_path}
 
     def __len__(self):
         return self.A_size

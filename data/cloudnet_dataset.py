@@ -1,5 +1,4 @@
 import csv
-from math import cos, sin
 import numpy as np
 import os
 import pickle
@@ -9,18 +8,7 @@ import torch
 import torchvision.transforms as transforms
 
 from data.base_dataset import BaseDataset, get_posenet_transform
-
-def euler_to_quaternion(theta, phi, psi):
-    '''
-    converts an orientation represented by Euler angles into a unitary quaternion
-    '''
-    return np.array([
-        cos(phi)*cos(theta)*cos(psi) + sin(phi)*sin(theta)*sin(psi),
-        sin(phi)*cos(theta)*cos(psi) - cos(phi)*sin(theta)*sin(psi),
-        cos(phi)*sin(theta)*cos(psi) + sin(phi)*cos(theta)*sin(psi),
-        cos(phi)*cos(theta)*sin(psi) - sin(phi)*sin(theta)*cos(psi),
-    ])
-
+from util.geometry import euler_to_quaternion
 
 class CloudNetDataset(BaseDataset):
     def initialize(self, opt):
@@ -48,10 +36,10 @@ class CloudNetDataset(BaseDataset):
                 img_number = row['name'][-5:]
                 self.A_paths.append(os.path.join(self.root, file_path % img_number))
                 pose = np.array([row['pos_x'], row['pos_y'], row['pos_z']], dtype=float)
-                orientation = np.array([row['steer'],0,0], dtype=float)/2
+                # for now only 1 dof of rotation is enabled
+                orientation = np.array([0,0,row['steer']], dtype=float)/2
                 pose = np.concatenate((pose, euler_to_quaternion(*orientation)))
                 self.A_poses.append(pose)
-        self.A_poses = np.array(self.A_poses)
         print('Done')
 
         self.A_size = len(self.A_paths)
@@ -63,7 +51,7 @@ class CloudNetDataset(BaseDataset):
 
         A = self.extract_file(A_path)
 
-        return {'A': A, 'B': A_pose, 'A_paths': A_path}
+        return {'X': A, 'Y': A_pose, 'X_paths': A_path}
 
     def __len__(self):
         return self.A_size
@@ -80,9 +68,10 @@ class CloudNetDataset(BaseDataset):
             return get_posenet_transform(self.opt, np.zeros((256,256,3)))(img)
 
         if self.opt.input_type == 'point_cloud':
+            fs = self.opt.fineSize
             with open(path, 'rb') as f:
                 data = pickle.load(f)
-            img = data[:224*224,:3].T.reshape((3,224,224))
+            img = data[:fs**2,:3].T.reshape((3,fs,fs))
             return torch.from_numpy(img)
 
         raise NotImplementedError('CloudNet does not accept this type of data for now: %s' % opt.input_type)

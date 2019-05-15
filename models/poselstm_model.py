@@ -46,15 +46,8 @@ class PoseLSTModel(BaseModel):
         # networks.print_network(self.netG)
         # print('-----------------------------------------------')
 
-    def set_input(self, input):
-        input_A = input['A']
-        input_B = input['B']
-        self.image_paths = input['A_paths']
-        self.input_A.resize_(input_A.size()).copy_(input_A)
-        self.input_B.resize_(input_B.size()).copy_(input_B)
-
     def forward(self):
-        self.pred_B = self.netG(self.input_A)
+        self.pred_Y = self.netG(self.input_X)
 
     def backward(self):
         self.loss_G = 0
@@ -62,9 +55,9 @@ class PoseLSTModel(BaseModel):
         self.loss_ori = 0
         loss_weights = [0.3, 0.3, 1]
         for l, w in enumerate(loss_weights):
-            mse_pos = self.criterion(self.pred_B[2*l], self.input_B[:, 0:3])
-            ori_gt = F.normalize(self.input_B[:, 3:], p=2, dim=1)
-            mse_ori = self.criterion(self.pred_B[2*l+1], ori_gt)
+            mse_pos = self.criterion(self.pred_Y[2*l], self.input_Y[:, 0:3])
+            ori_gt = F.normalize(self.input_Y[:, 3:], p=2, dim=1)
+            mse_ori = self.criterion(self.pred_Y[2*l+1], ori_gt)
             self.loss_G += (mse_pos + mse_ori * self.opt.beta) * w
             self.loss_pos += mse_pos.item() * w
             self.loss_ori += mse_ori.item() * w * self.opt.beta
@@ -75,4 +68,3 @@ class PoseLSTModel(BaseModel):
         self.optimizer_G.zero_grad()
         self.backward()
         self.optimizer_G.step()
-
