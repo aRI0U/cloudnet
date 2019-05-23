@@ -2,8 +2,9 @@ import numpy as np
 import os
 import ntpath
 import time
+
 from . import util
-from . import html
+from . import my_html
 
 
 class Visualizer():
@@ -107,6 +108,7 @@ class Visualizer():
             self.plot_data = {'X': [], 'Y': [], 'legend': list(errors.keys())}
         self.plot_data['X'].append(epoch + counter_ratio)
         self.plot_data['Y'].append([errors[k] for k in self.plot_data['legend']])
+
         self.vis.line(
             X=np.stack([np.array(self.plot_data['X'])] * len(self.plot_data['legend']), 1),
             Y=np.array(self.plot_data['Y']),
@@ -126,6 +128,15 @@ class Visualizer():
         print(message)
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)
+
+    def print_anticipated_loss(self):
+        self.regression.fit(self.anticipator[0].reshape(-1,1), self.anticipator[1])
+        pred_loss = self.regression.predict(np.array([[500]]))
+        score = self.regression.score(self.anticipator[0].reshape(-1,1), self.anticipator[1])
+        print('Anticipated loss at epoch 500:', pred_loss[0])
+        print('Score=%.3f' % score)
+
+
 
     # save image to the disk
     def save_images(self, webpage, visuals, image_path):
