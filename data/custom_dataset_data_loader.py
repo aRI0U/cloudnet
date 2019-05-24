@@ -4,16 +4,16 @@ from data.base_data_loader import BaseDataLoader
 
 def CreateDataset(opt):
     dataset = None
-    if opt.model == 'cloudnet':
-        from data.cloudnet_dataset import CloudNetDataset
-        dataset = CloudNetDataset()
+    # if opt.model in ['cloudnet', 'cloudcnn']:
+    from data.cloudnet_dataset import CloudNetDataset
+    dataset = CloudNetDataset()
 
-    elif opt.dataset_mode == 'unaligned':
-        from data.unaligned_posenet_dataset import UnalignedPoseNetDataset
-        dataset = UnalignedPoseNetDataset()
-
-    else:
-        raise ValueError("Dataset [%s] not recognized." % opt.dataset_mode)
+    # elif opt.dataset_mode == 'unaligned':
+    #     from data.unaligned_posenet_dataset import UnalignedPoseNetDataset
+    #     dataset = UnalignedPoseNetDataset()
+    #
+    # else:
+    #     raise ValueError("Dataset mode [%s] not recognized." % opt.dataset_mode)
 
     print("Dataset [%s] was created" % (dataset.name()))
     dataset.initialize(opt)
@@ -30,13 +30,6 @@ class CustomDatasetDataLoader(BaseDataLoader):
 
         def init_fn(worker_id):
             torch.manual_seed(opt.seed)
-
-        def custom_collate(batch):
-            # TODO
-            print('collating')
-            tensor = torch.utils.data._utils.default_collate(batch)
-            print(tensor)
-            return tensor
 
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
