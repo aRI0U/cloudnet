@@ -62,8 +62,13 @@ def define_network(input_nc, lstm_hidden_size, model, init_from=None, isTest=Fal
         netG = PoseNet(input_nc, weights=init_from, isTest=isTest, gpu_ids=gpu_ids)
     elif model == 'poselstm':
         netG = PoseLSTM(input_nc, lstm_hidden_size, weights=init_from, isTest=isTest, gpu_ids=gpu_ids)
-    else: #cloudnet
-        netG = cloudnet.CloudNet(input_nc, use_xyz=True, weights=init_from, isTest=isTest, gpu_ids=gpu_ids)
+    elif model == 'cloudnet': #cloudnet
+        netG = cloudnet.CloudNet()
+    elif model == 'cloudcnn':
+        netG = cloudnet.CloudCNN(input_nc, lstm_hidden_size)
+    else:
+        raise AttributeError('Model [%s] does not exist' % model)
+        # netG = cloudnet.CloudNet()
     if len(gpu_ids) > 0:
         netG.cuda(gpu_ids[0])
     return netG
@@ -119,7 +124,7 @@ class RegressionHead(nn.Module):
         output_xy = self.cls_fc_xy(output)
         output_wpqr = self.cls_fc_wpqr(output)
         output_wpqr = F.normalize(output_wpqr, p=2, dim=1)
-        return [torch.cat((output_xy, output_wpqr), 1)]
+        return [output_xy, output_wpqr]
 
 # define inception block for GoogleNet
 class InceptionBlock(nn.Module):
