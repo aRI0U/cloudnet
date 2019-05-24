@@ -1,5 +1,7 @@
 from collections import OrderedDict
 from math import pi
+import os
+import pickle
 
 import torch
 import torch.nn.functional as F
@@ -13,13 +15,31 @@ class CloudNetModel(BaseModel):
         return 'CloudNetModel'
 
     def initialize(self, opt):
-        BaseModel.initialize(self, opt)
+        print(self.name())
+        self.opt = opt
+        self.gpu_ids = opt.gpu_ids
+        self.isTrain = opt.isTrain
 
-        # self.mean_image = np.load(os.path.join(opt.dataroot , 'mean_image.npy'))
+        self.Tensor = torch.cuda.FloatTensor if self.gpu_ids else torch.Tensor
+        self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
 
+        # define tensors
+        self.input_X = self.Tensor(opt.batchSize, opt.n_points, opt.input_nc)
+        self.input_Y = self.Tensor(opt.batchSize, opt.output_nc)
+
+        # load pretrained model
+        self.pretrained_weights = None
+        if self.isTrain and opt.init_weights != '':
+            pretrained_path = os.path.join('pretrained_models', opt.init_weights)
+            print('Initializing the weights from %s...' % pretrained_path, end='\t')
+            with open(pretrained_path, 'rb') as f:
+                self.pretrained_weights = pickle.load(f, encoding='bytes')
+            print('Done')
+
+        # define network
         self.netG = networks.define_network(
             opt.input_nc,
-            opt.lstm_hidden_size,
+            opt.n_points,
             opt.model,
             init_from=self.pretrained_weights,
             isTest=not self.isTrain,
@@ -33,8 +53,8 @@ class CloudNetModel(BaseModel):
         if self.isTrain:
             self.old_lr = opt.lr
             # define loss functions
-            self.criterion = geometric_loss
             self.mse = torch.nn.MSELoss()
+            self.criterion = geometric_loss if self.opt.criterion == 'geometric' else self.mse
 
             # initialize optimizers
             self.schedulers = []
@@ -48,28 +68,30 @@ class CloudNetModel(BaseModel):
             #     self.schedulers.append(networks.get_scheduler(optimizer, opt))
 
         print('---------- Networks initialized -------------')
-        # networks.print_network(self.netG)
-        # print('-----------------------------------------------')
+
+    def set_input(self, batch):
+        input_X = batch['X']
+        input_Y = batch['Y']
+        self.image_paths = batch['X_paths']
+        self.input_X.resize_(input_X.size()).copy_(input_X)
+        self.input_Y.resize_(input_Y.size()).copy_(input_Y)
 
     def forward(self):
         self.pred_Y = self.netG(self.input_X)
 
     def backward(self):
-        self.loss_G = 0
-        self.loss_pos = 0
-        self.loss_ori = 0
-        loss_weights = [0.3, 0.3, 1]
-        for i, w in enumerate(loss_weights):
-            # position loss
-            mse_pos = self.mse(self.pred_Y[i][:,:3], self.input_Y[:,0:3])
-            # orientation loss
-            ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-            mse_ori = self.mse(self.pred_Y[i][:,3:], ori_gt)
+        # position loss
+        self.loss_pos = self.mse(self.pred_Y[:,:3], self.input_Y[:,:3])
+        # orientation loss
+        ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
+        self.loss_ori = self.mse(self.pred_Y[:,3:], ori_gt) * 180 / pi
 
-            self.loss_pos += mse_pos.item() * w
-            self.loss_ori += mse_ori.item() * w * 180 / pi
-            loss = self.criterion(self.input_X.reshape(-1,3,self.opt.fineSize**2), self.input_Y, self.pred_Y[i])
-            self.loss_G += w * loss
+        if self.opt.criterion == 'mse':
+            self.loss_G = self.loss_pos + self.opt.beta * self.loss_ori
+        elif self.opt.criterion == 'geometric':
+            self.loss_G = self.criterion(self.input_X[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
+        else:
+            raise AttributeError('Criterion [%s] does not exist' % self.opt.criterion)
         self.loss_G.backward()
 
     def optimize_parameters(self):
@@ -80,8 +102,8 @@ class CloudNetModel(BaseModel):
 
     def get_current_errors(self):
         if self.opt.isTrain:
-            return OrderedDict([('pos_err', self.loss_pos),
-                                ('ori_err', self.loss_ori),
+            return OrderedDict([('pos_err', self.loss_pos.item()),
+                                ('ori_err', self.loss_ori.item()),
                                 ('geom_err', self.loss_G.item()),
                                 ])
 
