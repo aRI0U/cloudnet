@@ -129,13 +129,6 @@ class Visualizer():
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)
 
-    def print_anticipated_loss(self):
-        self.regression.fit(self.anticipator[0].reshape(-1,1), self.anticipator[1])
-        pred_loss = self.regression.predict(np.array([[500]]))
-        score = self.regression.score(self.anticipator[0].reshape(-1,1), self.anticipator[1])
-        print('Anticipated loss at epoch 500:', pred_loss[0])
-        print('Score=%.3f' % score)
-
 
 
     # save image to the disk
