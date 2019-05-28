@@ -1,11 +1,13 @@
 import numpy
+import os
 import random
+import re
 import time
 
 import torch
 
 from options.train_options import TrainOptions
-from data.data_loader import CreateDataLoader
+from data.data_loader import create_data_loader
 from models.models import create_model
 from util.visualizer import Visualizer
 
@@ -19,10 +21,20 @@ random.seed(opt.seed)
 torch.backends.cudnn.deterministic = True
 
 ## LOADING DATA
-data_loader = CreateDataLoader(opt)
+data_loader = create_data_loader(opt)
 dataset = data_loader.load_data()
 dataset_size = len(data_loader)
 print('#training images = %d' % dataset_size)
+
+if opt.continue_train and opt.which_epoch == 'latest':
+    epoch_label = ''
+    for f in os.listdir(os.path.join(opt.checkpoints_dir, opt.name)):
+        epoch_count = re.search('(.+?)_net_G.pth', f)
+        if epoch_count is not None:
+            epoch_label = max(epoch_label, epoch_count.group(1))
+    else:
+        opt.which_epoch = epoch_label
+        opt.epoch_count = int(epoch_label)+1
 
 model = create_model(opt)
 visualizer = Visualizer(opt)
@@ -33,12 +45,12 @@ print('\n----------------- Training ------------------')
 for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
     epoch_start_time = time.time()
     epoch_iter = 0
-    for i, data in enumerate(dataset):
+    for i, batch in enumerate(dataset):
         iter_start_time = time.time()
         visualizer.reset()
         total_steps += opt.batchSize
         epoch_iter += opt.batchSize
-        model.set_input(data)
+        model.set_input(batch)
         model.optimize_parameters()
 
         # if total_steps % opt.display_freq == 0:
@@ -59,7 +71,6 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
     if epoch % opt.save_epoch_freq == 0:
         print('saving the model at the end of epoch %d, iters %d' %
               (epoch, total_steps))
-        model.save('latest')
         model.save(epoch)
 
     print('End of epoch %d / %d \t Time Taken: %d sec' %

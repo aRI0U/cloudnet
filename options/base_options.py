@@ -6,6 +6,7 @@ import pickle
 import torch
 
 from util import util
+from util.find_exp import find_experiment
 
 class BaseOptions():
     def __init__(self):
@@ -36,7 +37,7 @@ class BaseOptions():
         self.base.add_argument('--no_dropout', action='store_true', help='no dropout for the generator')
         self.base.add_argument('--no_flip', action='store_true', default=True, help='if specified, do not flip the images for data augmentation')
         self.base.add_argument('--nThreads', default=8, type=int, help='# threads for loading data')
-        self.base.add_argument('--n_points', default=4096, type=int, help='# points considered per point cloud')
+        self.base.add_argument('--n_points', default=16384, type=int, help='# points considered per point cloud')
         self.base.add_argument('--output_nc', type=int, default=7, help='# of output image channels')
         self.base.add_argument('--resize_or_crop', type=str, default='scale_width_and_crop', help='scaling and cropping of images at load time [resize_and_crop|crop|scale_width|scale_width_and_crop]')
         self.base.add_argument('--sampling', type=str, choices=['fps', 'uni'], default='fps', help='chooses whether points are sampled uniformly or by furthest distance')
@@ -64,16 +65,17 @@ class BaseOptions():
 
         # set experiment name
         if self.opt.name is None:
-            if self.opt.isTrain:
-                self.opt.name = os.path.join('%s/%s/npoints%d/beta%d/%s' % (self.opt.model, self.opt.criterion, self.opt.n_points, self.opt.beta, datetime.now().strftime('%Y-%m-%d_%H:%M')))
+            if self.opt.isTrain and not self.opt.continue_train:
+                self.opt.name = os.path.join(self.opt.model, datetime.now().strftime('%Y-%m-%d_%H:%M'))
             else:
-                path = '%s/%s/npoints%d/beta%d' % (self.opt.model, self.opt.criterion, self.opt.n_points, self.opt.beta)
-                last = '0'
-                for dir in os.listdir(os.path.join(self.opt.checkpoints_dir, path)):
-                    if dir > last:
-                        last = dir
-                self.opt.name = os.path.join(path, last)
-
+                candidates = find_experiment(self.opt)
+                if candidates != []:
+                    self.opt.name = max(candidates)
+                elif self.opt.continue_train:
+                    self.opt.continue_train = False
+                    self.opt.name = os.path.join(self.opt.model, datetime.now().strftime('%Y-%m-%d_%H:%M'))
+                else:
+                    raise ValueError('There is no model trained with the selected options')
         args = vars(self.opt)
 
         print('------------ Options -------------')
