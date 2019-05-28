@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from math import pi
+import numpy as np
 import os
 import pickle
 
@@ -84,7 +84,7 @@ class CloudNetModel(BaseModel):
         self.loss_pos = self.mse(self.pred_Y[:,:3], self.input_Y[:,:3])
         # orientation loss
         ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-        self.loss_ori = self.mse(self.pred_Y[:,3:], ori_gt) * 180 / pi
+        self.loss_ori = self.mse(self.pred_Y[:,3:], ori_gt) * 180 / np.pi
 
         if self.opt.criterion == 'mse':
             self.loss_G = self.loss_pos + self.opt.beta * self.loss_ori
@@ -107,9 +107,12 @@ class CloudNetModel(BaseModel):
                                 ('geom_err', self.loss_G.item()),
                                 ])
 
-        raise NotImplementedError
-        pos_err = torch.dist(self.pred_Y[0], self.input_Y[:, 0:3])
-        ori_gt = F.normalize(self.input_Y[:, 3:], p=2, dim=1)
-        abs_distance = torch.abs((ori_gt.mul(self.pred_Y[1])).sum())
-        ori_err = 2*180/numpy.pi * torch.acos(abs_distance)
+        pos_err = torch.dist(self.pred_Y[:,:3], self.input_Y[:,:3])
+        ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
+        abs_distance = torch.abs((ori_gt.mul(self.pred_Y[:,3:])).sum())
+        ori_err = 2*180/np.pi * torch.acos(abs_distance)
         return [pos_err.item(), ori_err.item()]
+
+
+    def get_current_pose(self):
+        return self.pred_Y.data[0].cpu().numpy()

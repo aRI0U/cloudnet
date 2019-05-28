@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import numpy as np
 import os
 import pickle
 
@@ -61,7 +62,6 @@ class BaseModel():
             return OrderedDict([('pos_err', self.loss_pos),
                                 ('ori_err', self.loss_ori),
                                 ])
-            # return OrderedDict([('loss_G', self.loss_G.item())])
 
         pos_err = torch.dist(self.pred_Y[0], self.input_Y[:, 0:3])
         ori_gt = F.normalize(self.input_Y[:, 3:], p=2, dim=1)
@@ -71,7 +71,7 @@ class BaseModel():
 
 
     def get_current_pose(self):
-        return numpy.concatenate((self.pred_Y[0].data[0].cpu().numpy(),
+        return np.concatenate((self.pred_Y[0].data[0].cpu().numpy(),
                                   self.pred_Y[1].data[0].cpu().numpy()))
 
     def get_current_visuals(self):

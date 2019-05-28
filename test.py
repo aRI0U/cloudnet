@@ -1,11 +1,14 @@
 import time
+import numpy as np
 import os
+import re
+
 from options.test_options import TestOptions
-from data.data_loader import CreateDataLoader
+from data.data_loader import create_data_loader
 from models.models import create_model
+from util.find_exp import find_experiment
 from util.visualizer import Visualizer
-from util import html
-import numpy
+from util import my_html
 
 opt = TestOptions().parse()
 opt.nThreads = 1   # test code only supports nThreads = 1
@@ -13,18 +16,14 @@ opt.batchSize = 1  # test code only supports batchSize = 1
 opt.serial_batches = True  # no shuffle
 opt.no_flip = True  # no flip
 
-data_loader = CreateDataLoader(opt)
+data_loader = create_data_loader(opt)
 dataset = data_loader.load_data()
 
+checkpoints_dir = os.path.join(opt.checkpoints_dir, opt.name)
 results_dir = os.path.join(opt.results_dir, opt.name)
-if not os.path.exists(results_dir):
-    os.makedirs(results_dir)
+os.makedirs(results_dir, exist_ok=True)
 
 besterror  = [0, float('inf'), float('inf')] # nepoch, medX, medQ
-if opt.model == 'posenet':
-    testepochs = numpy.arange(450, 500+1, 5)
-else:
-    testepochs = numpy.arange(450, 1200+1, 5)
 
 testfile = open(os.path.join(results_dir, 'test_median.txt'), 'a')
 testfile.write('epoch medX  medQ\n')
@@ -33,14 +32,21 @@ testfile.write('==================\n')
 model = create_model(opt)
 visualizer = Visualizer(opt)
 
-for testepoch in testepochs:
+testepochs = []
+for pth in os.listdir(checkpoints_dir):
+    epoch = re.search('(.+?)_net_G.pth', pth)
+    if epoch is None:
+        continue
+    testepochs.append(epoch.group(1))
+
+for testepoch in sorted(testepochs, key = lambda s: '%6s' % s):
     model.load_network(model.netG, 'G', testepoch)
     visualizer.change_log_path(testepoch)
     # test
     # err_pos = []
     # err_ori = []
     err = []
-    print("epoch: "+ str(testepoch))
+    print("epoch: %s" % testepoch)
     for i, data in enumerate(dataset):
         model.set_input(data)
         model.test()
@@ -54,12 +60,12 @@ for testepoch in testepochs:
         # err_ori.append(err_o)
         err.append([err_p, err_o])
 
-    median_pos = numpy.median(err, axis=0)
+    median_pos = np.median(err, axis=0)
     if median_pos[0] < besterror[1]:
         besterror = [testepoch, median_pos[0], median_pos[1]]
     print()
-    # print("median position: {0:.2f}".format(numpy.median(err_pos)))
-    # print("median orientat: {0:.2f}".format(numpy.median(err_ori)))
+    # print("median position: {0:.2f}".format(np.median(err_pos)))
+    # print("median orientat: {0:.2f}".format(np.median(err_ori)))
     print("\tmedian wrt pos.: {0:.2f}m {1:.2f}°".format(median_pos[0], median_pos[1]))
     testfile.write("{0:<5} {1:.2f}m {2:.2f}°\n".format(testepoch,
                                                      median_pos[0],
