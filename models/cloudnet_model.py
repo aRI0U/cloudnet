@@ -54,7 +54,7 @@ class CloudNetModel(BaseModel):
             self.old_lr = opt.lr
             # define loss functions
             self.mse = torch.nn.MSELoss()
-            self.criterion = geometric_loss if self.opt.criterion == 'geometric' else self.mse
+            self.criterion = geometric_loss if self.opt.criterion == 'geo' else self.mse
 
             # initialize optimizers
             self.schedulers = []
@@ -88,7 +88,7 @@ class CloudNetModel(BaseModel):
 
         if self.opt.criterion == 'mse':
             self.loss_G = self.loss_pos + self.opt.beta * self.loss_ori
-        elif self.opt.criterion == 'geometric':
+        elif self.opt.criterion == 'geo':
             self.loss_G = self.criterion(self.input_X[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
         else:
             raise AttributeError('Criterion [%s] does not exist' % self.opt.criterion)

@@ -139,7 +139,6 @@ class CloudCNN(Net):
     """
     def __init__(self, input_nc, n_points):
         super(CloudCNN, self).__init__()
-        print(input_nc)
         self.xconv1 = XConv(input_nc, 16, 3, 4)
         self.lin1 = Lin(n_points, n_points//4)
         self.xconv2 = XConv(16, 32, 3, 4)
