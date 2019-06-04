@@ -1,7 +1,6 @@
 import numpy
 import os
 import random
-import re
 import time
 
 import torch
@@ -9,7 +8,11 @@ import torch
 from options.train_options import TrainOptions
 from data.data_loader import create_data_loader
 from models.models import create_model
+import util.sql as sql
 from util.visualizer import Visualizer
+
+# open connection with database
+sql.connect("./checkpoints")
 
 opt = TrainOptions().parse()
 
@@ -27,14 +30,8 @@ dataset_size = len(data_loader)
 print('#training images = %d' % dataset_size)
 
 if opt.continue_train and opt.which_epoch == 'latest':
-    epoch_label = ''
-    for f in os.listdir(os.path.join(opt.checkpoints_dir, opt.name)):
-        epoch_count = re.search('(.+?)_net_G.pth', f)
-        if epoch_count is not None:
-            epoch_label = max(epoch_label, epoch_count.group(1))
-    else:
-        opt.which_epoch = epoch_label
-        opt.epoch_count = int(epoch_label)+1
+    opt.epoch_count = sql.find_info(opt.name, 'last_epoch')[0]+1
+    opt.which_epoch = str(opt.epoch_count-1)
 
 model = create_model(opt)
 visualizer = Visualizer(opt)
@@ -72,7 +69,10 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         print('saving the model at the end of epoch %d, iters %d' %
               (epoch, total_steps))
         model.save(epoch)
+        sql.update_last_epoch(epoch, opt.name)
 
     print('End of epoch %d / %d \t Time Taken: %d sec' %
           (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
     model.update_learning_rate()
+
+sql.close()

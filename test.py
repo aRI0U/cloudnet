@@ -6,9 +6,13 @@ import re
 from options.test_options import TestOptions
 from data.data_loader import create_data_loader
 from models.models import create_model
-from util.find_exp import find_experiment
+import util.sql as sql
 from util.visualizer import Visualizer
 from util import my_html
+
+sql.connect("./checkpoints")
+
+sql.init_test_db()
 
 opt = TestOptions().parse()
 opt.nThreads = 1   # test code only supports nThreads = 1
@@ -29,6 +33,10 @@ testfile = open(os.path.join(results_dir, 'test_median.txt'), 'a')
 testfile.write('epoch medX  medQ\n')
 testfile.write('==================\n')
 
+if opt.which_epoch == 'latest':
+    last_epoch = sql.find_info(opt.name, 'last_epoch')[0]
+    opt.which_epoch = str(last_epoch)
+
 model = create_model(opt)
 visualizer = Visualizer(opt)
 
@@ -40,6 +48,8 @@ for pth in os.listdir(checkpoints_dir):
     testepochs.append(epoch.group(1))
 
 for testepoch in sorted(testepochs, key = lambda s: '%6s' % s):
+    if sql.get_test_result(opt.name, int(testepoch)) is not None:
+        continue
     model.load_network(model.netG, 'G', testepoch)
     visualizer.change_log_path(testepoch)
     # test
@@ -61,6 +71,7 @@ for testepoch in sorted(testepochs, key = lambda s: '%6s' % s):
         err.append([err_p, err_o])
 
     median_pos = np.median(err, axis=0)
+    sql.add_test_result(opt.name, int(testepoch), median_pos[0], median_pos[1])
     if median_pos[0] < besterror[1]:
         besterror = [testepoch, median_pos[0], median_pos[1]]
     print()
@@ -76,3 +87,5 @@ testfile.write('-----------------\n')
 testfile.write("{0:<5} {1:.2f}m {2:.2f}°\n".format(*besterror))
 testfile.write('==================\n')
 testfile.close()
+
+sql.close()

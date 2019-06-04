@@ -5,8 +5,7 @@ import pickle
 
 import torch
 
-from util import util
-from util.find_exp import find_experiment
+import util.sql as sql
 
 class BaseOptions():
     def __init__(self):
@@ -21,8 +20,9 @@ class BaseOptions():
         self.base.add_argument('--batchSize', type=int, default=32, help='input batch size')
         self.base.add_argument('--beta', type=float, default=5, help='beta factor used in posenet.')
         self.base.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
-        self.base.add_argument('--criterion', type=str, choices=['geometric','mse'], default='mse', help='criterion used as loss')
+        self.base.add_argument('--criterion', type=str, choices=['geo','mse'], default='mse', help='criterion used as loss')
         self.base.add_argument('--dataset_mode', type=str, choices=['unaligned','aligned','single'], default='unaligned', help='the way datasets are loaded')
+        self.base.add_argument('--db_dir', type=str, default=None, help='location of the database containing options infos')
         self.base.add_argument('--display_id', type=int, default=0, help='window id of the web display')
         self.base.add_argument('--display_port', type=int, default=8097, help='visdom port of the web display')
         self.base.add_argument('--display_winsize', type=int, default=224,  help='display window size')
@@ -32,7 +32,7 @@ class BaseOptions():
         self.base.add_argument('--loadSize', type=int, default=256, help='scale images to this size')
         self.base.add_argument('--lstm_hidden_size', type=int, default=256, help='hidden size of the LSTM layer in PoseLSTM')
         self.base.add_argument('--max_dataset_size', type=int, default=float("inf"), help='Maximum number of samples allowed per dataset. If the dataset directory contains more than max_dataset_size, only a subset is loaded.')
-        self.base.add_argument('--model', type=str, choices=['posenet','poselstm','cloudnet','cloudcnn'], default='posenet', help='model to use')
+        self.base.add_argument('--model', type=str, choices=['posenet','poselstm','cloudnet','cloudcnn'], default='cloudcnn', help='model to use')
         self.base.add_argument('--name', type=str, default=None, help='name of the experiment. It decides where to store samples and models')
         self.base.add_argument('--no_dropout', action='store_true', help='no dropout for the generator')
         self.base.add_argument('--no_flip', action='store_true', default=True, help='if specified, do not flip the images for data augmentation')
@@ -63,19 +63,22 @@ class BaseOptions():
         if len(self.opt.gpu_ids) > 0:
             torch.cuda.set_device(self.opt.gpu_ids[0])
 
+        if self.opt.db_dir is None:
+            self.opt.db_dir = self.opt.checkpoints_dir
+
         # set experiment name
         if self.opt.name is None:
             if self.opt.isTrain and not self.opt.continue_train:
                 self.opt.name = os.path.join(self.opt.model, datetime.now().strftime('%Y-%m-%d_%H:%M'))
             else:
-                candidates = find_experiment(self.opt)
-                if candidates != []:
-                    self.opt.name = max(candidates)
-                elif self.opt.continue_train:
+                name = sql.find_experiment(self.opt)
+                if name is not None:
+                    self.opt.name = name
+                elif self.opt.isTrain and self.opt.continue_train:
                     self.opt.continue_train = False
                     self.opt.name = os.path.join(self.opt.model, datetime.now().strftime('%Y-%m-%d_%H:%M'))
                 else:
-                    raise ValueError('There is no model trained with the selected options')
+                    raise ValueError('There is no model trained with such options')
         args = vars(self.opt)
 
         print('------------ Options -------------')
@@ -85,11 +88,15 @@ class BaseOptions():
 
         # save to the disk
         expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
-        util.mkdirs(expr_dir)
+        os.makedirs(expr_dir, exist_ok=True)
         file_name = os.path.join(expr_dir, 'opt_'+self.opt.phase+'.txt')
         with open(file_name, 'wt') as opt_file:
             opt_file.write('------------ Options -------------\n')
             for k, v in sorted(args.items()):
                 opt_file.write('%s: %s\n' % (str(k), str(v)))
             opt_file.write('-------------- End ----------------\n')
+
+        # save to database
+        if self.opt.isTrain and not self.opt.continue_train:
+            sql.new_experiment(args)
         return self.opt
