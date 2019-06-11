@@ -1,9 +1,19 @@
-import numpy
 import os
+from numpy.random import seed
 import random
 import time
 
-import torch
+t0 = time.time()
+t1 = t0
+
+def debug(i):
+    global t0, t1
+    t = time.time()
+    print('line %d of %s: Time elapsed: %.3f, %.3f' % (i, os.path.abspath(__file__), t-t1, t-t0))
+    t1 = t
+
+import torch.backends.cudnn
+from torch import manual_seed
 
 from options.train_options import TrainOptions
 from data.data_loader import create_data_loader
@@ -17,10 +27,9 @@ sql.connect("./checkpoints")
 opt = TrainOptions().parse()
 
 ## SEEDING
-torch.manual_seed(opt.seed)
-numpy.random.seed(opt.seed)
+manual_seed(opt.seed)
+seed(opt.seed)
 random.seed(opt.seed)
-# torch.backends.cudnn.enabled = False
 torch.backends.cudnn.deterministic = True
 
 ## LOADING DATA

@@ -1,16 +1,14 @@
 from collections import OrderedDict
-import numpy as np
+from math import pi
 import os
-import pickle
 
 import torch
 import torch.nn.functional as F
 
-from . import networks
-from .base_model import BaseModel
-from util.geometry import geometric_loss
+import models.cloudnet as cloudnet
+from util.geometry import GeometricLoss
 
-class CloudNetModel(BaseModel):
+class CloudNetModel():
     def name(self):
         return 'CloudNetModel'
 
@@ -27,25 +25,21 @@ class CloudNetModel(BaseModel):
         self.input_X = self.Tensor(opt.batchSize, opt.n_points, opt.input_nc)
         self.input_Y = self.Tensor(opt.batchSize, opt.output_nc)
 
-        # load pretrained model
-        self.pretrained_weights = None
-        if self.isTrain and opt.init_weights != '':
-            pretrained_path = os.path.join('pretrained_models', opt.init_weights)
-            print('Initializing the weights from %s...' % pretrained_path, end='\t')
-            with open(pretrained_path, 'rb') as f:
-                self.pretrained_weights = pickle.load(f, encoding='bytes')
-            print('Done')
-
         # define network
-        self.netG = networks.define_network(
-            opt.input_nc,
-            opt.n_points,
-            opt.model,
-            init_from=self.pretrained_weights,
-            isTest=not self.isTrain,
-            f_size=opt.fineSize,
-            gpu_ids=self.gpu_ids
-        )
+        use_gpu = len(self.gpu_ids) > 0
+
+        if use_gpu:
+            assert(torch.cuda.is_available())
+
+        if opt.model == 'cloudnet':
+            self.netG = cloudnet.CloudNet()
+        elif opt.model == 'cloudcnn':
+            self.netG = cloudnet.CloudCNN(opt.input_nc, opt.n_points)
+        else:
+            raise ValueError('Model [%s] does not exist' % model)
+
+        if use_gpu:
+            self.netG.cuda(self.gpu_ids[0])
 
         if not self.isTrain or opt.continue_train:
             self.load_network(self.netG, 'G', opt.which_epoch)
@@ -54,7 +48,7 @@ class CloudNetModel(BaseModel):
             self.old_lr = opt.lr
             # define loss functions
             self.mse = torch.nn.MSELoss()
-            self.criterion = geometric_loss if self.opt.criterion == 'geo' else self.mse
+            self.criterion = GeometricLoss() if self.opt.criterion == 'geo' else self.mse
 
             # initialize optimizers
             self.schedulers = []
@@ -84,7 +78,7 @@ class CloudNetModel(BaseModel):
         self.loss_pos = self.mse(self.pred_Y[:,:3], self.input_Y[:,:3])
         # orientation loss
         ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-        self.loss_ori = self.mse(self.pred_Y[:,3:], ori_gt) * 180 / np.pi
+        self.loss_ori = self.mse(self.pred_Y[:,3:], ori_gt) * 180 / pi
 
         if self.opt.criterion == 'mse':
             self.loss_G = self.loss_pos + self.opt.beta * self.loss_ori
@@ -100,6 +94,14 @@ class CloudNetModel(BaseModel):
         self.backward()
         self.optimizer_G.step()
 
+    # no backprop gradients
+    def test(self):
+        self.forward()
+
+    # get image paths
+    def get_image_paths(self):
+        return self.image_paths
+
     def get_current_errors(self):
         if self.opt.isTrain:
             return OrderedDict([('pos_err', self.loss_pos.item()),
@@ -110,9 +112,38 @@ class CloudNetModel(BaseModel):
         pos_err = torch.dist(self.pred_Y[:,:3], self.input_Y[:,:3])
         ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
         abs_distance = torch.abs((ori_gt.mul(self.pred_Y[:,3:])).sum())
-        ori_err = 2*180/np.pi * torch.acos(abs_distance)
+        ori_err = 2*180/pi * torch.acos(abs_distance)
         return [pos_err.item(), ori_err.item()]
-
 
     def get_current_pose(self):
         return self.pred_Y.data[0].cpu().numpy()
+
+    def get_current_visuals(self):
+        input_X = util.tensor2im(self.input_X.data)
+        # pred_Y = util.tensor2im(self.pred_Y.data)
+        # input_Y = util.tensor2im(self.input_Y.data)
+        return OrderedDict([('input_X', input_X)])
+
+    def save(self, label):
+        self.save_network(self.netG, 'G', label, self.gpu_ids)
+
+    # helper saving function that can be used by subclasses
+    def save_network(self, network, network_label, epoch_label, gpu_ids):
+        save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
+        save_path = os.path.join(self.save_dir, save_filename)
+        torch.save(network.cpu().state_dict(), save_path)
+        if len(gpu_ids) and torch.cuda.is_available():
+            network.cuda(gpu_ids[0])
+
+    # helper loading function that can be used by subclasses
+    def load_network(self, network, network_label, epoch_label):
+        save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
+        save_path = os.path.join(self.save_dir, save_filename)
+        network.load_state_dict(torch.load(save_path))
+
+    # update learning rate (called once every epoch)
+    def update_learning_rate(self):
+        for scheduler in self.schedulers:
+            scheduler.step()
+        lr = self.optimizers[0].param_groups[0]['lr']
+        print('learning rate = %.7f' % lr)

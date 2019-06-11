@@ -1,29 +1,20 @@
 import csv
-import numpy as np
+from numpy import load
 import os
-import pickle
 
-from PIL import Image
 import torch
-import torchvision.transforms as transforms
+from torch.utils.data import Dataset
 
-from data.base_dataset import BaseDataset, get_posenet_transform
 from util.geometry import euler_to_quaternion
 
-class CloudNetDataset(BaseDataset):
+class CloudNetDataset(Dataset):
     def initialize(self, opt):
         self.opt = opt
         self.root = opt.dataroot
         driving_data = os.path.join(self.root, 'driving_data.csv')
-
         # select the folder corresponding to the right input type
         file_path = None
-        if self.opt.model in ['posenet', 'poselstm']:
-            file_path = os.path.join('CameraRGB0', 'image_%s.png')
-        elif self.opt.model in ['cloudnet', 'cloudcnn']:
-            file_path = os.path.join('PointCloudLocal1', 'point_cloud_%s.pickle')
-        else:
-            raise AttributeError('Model [%s] does not exist' % self.opt.model)
+        file_path = os.path.join('PointCloudLocal1', 'point_cloud_%s.npy')
         self.mean_image = None #np.load(os.path.join(self.root , 'mean_image.npy'))
         self.A_paths = []
         self.A_poses = []
@@ -39,13 +30,11 @@ class CloudNetDataset(BaseDataset):
                 if not os.path.isfile(path):
                     continue
                 self.A_paths.append(path)
-                pose = np.array([row['pos_x'], row['pos_y'], row['pos_z']], dtype=float)
+                pose = torch.tensor((float(row['pos_x']), float(row['pos_y']), float(row['pos_z'])))
                 # for now only 1 dof of rotation is enabled
-                orientation = np.array([0,0,row['steer']], dtype=float)/2
-                pose = np.concatenate((pose, euler_to_quaternion(*orientation)))
+                pose = torch.cat((pose, euler_to_quaternion(0, 0, float(row['steer'])/2)))
                 self.A_poses.append(pose)
         print('Done')
-
         self.A_size = len(self.A_paths)
 
     def __getitem__(self, index):
@@ -54,6 +43,7 @@ class CloudNetDataset(BaseDataset):
         A_pose = self.A_poses[index % self.A_size]
 
         A = self._extract_file(A_path)
+
         return {'X': A, 'Y': A_pose, 'X_paths': A_path}
 
     def __len__(self):
@@ -77,16 +67,10 @@ class CloudNetDataset(BaseDataset):
             torch.FloatTensor
                 (opt.n_points,opt.input_nc) tensor of point cloud
         """
-        if self.opt.model in ['posenet', 'poselstm']:
-            img = Image.open(path).convert('RGB')
-            return get_posenet_transform(self.opt, self.mean_image)(img)
-
-        if self.opt.model in ['cloudnet', 'cloudcnn']:
-            with open(path, 'rb') as f:
-                data = pickle.load(f)
-            img = self._sample(data, self.opt.input_nc, self.opt.n_points, self.opt.sampling)
-            return torch.from_numpy(img)
-        raise ValueError('Model [%s] does not exist' % self.opt.model)
+        with open(path, 'rb') as f:
+            data = load(f)
+        img = self._sample(data, self.opt.input_nc, self.opt.n_points, self.opt.sampling)
+        return torch.from_numpy(img)
 
     @staticmethod
     def _sample(data, input_nc, n_points, sampling):
