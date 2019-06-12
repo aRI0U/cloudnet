@@ -67,15 +67,14 @@ class CloudNetDataset(Dataset):
             torch.FloatTensor
                 (opt.n_points,opt.input_nc) tensor of point cloud
         """
-        with open(path, 'rb') as f:
-            data = load(f)
-        img = self._sample(data, self.opt.input_nc, self.opt.n_points, self.opt.sampling)
+        img = self._sample(path, self.opt.input_nc, self.opt.n_points, self.opt.sampling)
         return torch.from_numpy(img)
 
     @staticmethod
-    def _sample(data, input_nc, n_points, sampling):
+    def _sample(path, input_nc, n_points, sampling):
         if sampling == 'fps':
-            return data[:n_points, :input_nc]
+            return load(path, mmap_mode='r')[:n_points, :input_nc]
         if sampling == 'uni':
+            data = load(path, mmap_mode='r')
             return data[::(len(data))//n_points][:n_points, :input_nc]
         raise ValueError('Sampling [%s] does not exist' % sampling)
