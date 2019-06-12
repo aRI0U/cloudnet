@@ -50,28 +50,37 @@ for pth in os.listdir(checkpoints_dir):
 for testepoch in sorted(testepochs, key = lambda s: '%6s' % s):
     if sql.get_test_result(opt.name, int(testepoch)) is not None:
         continue
-    model.load_network(model.netG, 'G', testepoch)
-    visualizer.change_log_path(testepoch)
-    # test
-    # err_pos = []
-    # err_ori = []
-    err = []
-    print("epoch: %s" % testepoch)
-    for i, data in enumerate(dataset):
-        model.set_input(data)
-        model.test()
-        img_path = model.get_image_paths()[0]
-        print('\t%04d/%04d: process image... %s' % (i, len(dataset), img_path), end='\r')
-        image_path = img_path.split('/')[-2] + '/' + img_path.split('/')[-1]
-        pose = model.get_current_pose()
-        visualizer.save_estimated_pose(image_path, pose)
-        err_p, err_o = model.get_current_errors()
-        # err_pos.append(err_p)
-        # err_ori.append(err_o)
-        err.append([err_p, err_o])
 
-    median_pos = np.median(err, axis=0)
-    sql.add_test_result(opt.name, int(testepoch), median_pos[0], median_pos[1])
+    sql.new_test(opt.name, int(testepoch))
+
+    try:
+        model.load_network(model.netG, 'G', testepoch)
+        visualizer.change_log_path(testepoch)
+        # test
+        # err_pos = []
+        # err_ori = []
+        err = []
+        print("epoch: %s" % testepoch)
+        for i, data in enumerate(dataset):
+            model.set_input(data)
+            model.test()
+            img_path = model.get_image_paths()[0]
+            print('\t%04d/%04d: process image... %s' % (i, len(dataset), img_path), end='\r')
+            image_path = img_path.split('/')[-2] + '/' + img_path.split('/')[-1]
+            pose = model.get_current_pose()
+            visualizer.save_estimated_pose(image_path, pose)
+            err_p, err_o = model.get_current_errors()
+            # err_pos.append(err_p)
+            # err_ori.append(err_o)
+            err.append([err_p, err_o])
+
+        median_pos = np.median(err, axis=0)
+        sql.add_test_result(opt.name, int(testepoch), median_pos[0], median_pos[1])
+
+    except KeyboardInterrupt:
+        sql.remove_empty_tests()
+        raise KeyboardInterrupt
+
     if median_pos[0] < besterror[1]:
         besterror = [testepoch, median_pos[0], median_pos[1]]
     print()
