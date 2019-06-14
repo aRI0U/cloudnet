@@ -99,7 +99,7 @@ def find_experiment(opt):
     name = c.fetchone()[0]
     return name
 
-def find_info(name, cols):
+def find_info(name, cols, get_col_names=False):
     r"""
         Extract information from database
 
@@ -114,9 +114,17 @@ def find_info(name, cols):
         -------
         tuple
             tuple containing data from experiment whose name is [name]
+        or
+        (tuple, list) tuple
+            (data from experiment, colnames)
     """
     c = connection.cursor()
     c.execute("SELECT %s FROM options WHERE name = ?" % cols, (name,))
+    if get_col_names:
+        description = []
+        for d in c.description:
+            description.append(d[0])
+        return c.fetchone(), description
     return c.fetchone()
 
 def update_last_epoch(epoch, name):
@@ -206,19 +214,18 @@ def remove_empty_tests():
 
 
 if __name__ == '__main__':
-    # add_experiment('checkpoints/cloudcnn/2019-05-31_16:18', 50)
-    # find_experiment()
     connect("./checkpoints")
     c = connection.cursor()
     # c.execute('DELETE FROM options WHERE name = ""')
     # c.execute("UPDATE options SET last_epoch = 130 WHERE name = 'cloudcnn/2019-06-01_11:13'")
     # for row in c.execute('SELECT n_points, sampling, criterion, name, last_epoch FROM options ORDER BY n_points'):
     #     print(row)
-    for row in c.execute("""
-        SELECT test.name, sampling, criterion, epoch, pos_err, ori_err FROM test
-        JOIN options ON options.name = test.name
-        WHERE sampling = 'uni' AND n_points = '128'
-    """):
-        print(row)
+    # print(find_info('cloudcnn/2019-05-28_09:09', '*', True))
+    # for row in c.execute("""
+    #     SELECT test.name, sampling, criterion, epoch, pos_err, ori_err FROM test
+    #     JOIN options ON options.name = test.name
+    #     WHERE sampling = 'uni' AND n_points = '128'
+    # """):
+    #     print(row)
     # connection.commit()
     close()

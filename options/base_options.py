@@ -16,7 +16,7 @@ class BaseOptions():
 
     def initialize(self):
         # self.required.add_argument('--dataroot', required=True, help='path to images')
-        self.required.add_argument('--dataroot', default='./datasets/Carla/episode_000', help='path to images')
+        self.required.add_argument('--dataroot', default='./datasets/Carla/episode_000', help='path to point clouds')
         self.base.add_argument('--batchSize', type=int, default=32, help='input batch size')
         self.base.add_argument('--beta', type=float, default=5, help='beta factor used in posenet.')
         self.base.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
@@ -79,6 +79,27 @@ class BaseOptions():
                     self.opt.name = os.path.join(self.opt.model, datetime.now().strftime('%Y-%m-%d_%H:%M'))
                 else:
                     raise ValueError('There is no model trained with such options')
+
+        else:
+            if not self.isTrain or self.opt.continue_train:
+                print('Loading options from the experiment...', end='\t')
+                opt_vals, opt_names = sql.find_info(self.opt.name, '*', get_col_names=True)
+                for i in range(len(opt_names)):
+                    if opt_names[i] in ['isTrain', 'gpu_ids','db_dir','name']:
+                        continue
+                    try:
+                        opt_type = eval('type(self.opt.%s)' % opt_names[i])
+                    except AttributeError:
+                        continue
+                    if opt_type == str:
+                        fmt = '"%s"'
+                    elif opt_type == float:
+                        fmt = 'float("%s")'
+                    else:
+                        fmt = '%s'
+                    exec(('self.opt.%s = '+fmt) % (opt_names[i], opt_vals[i]))
+                print('Done.')
+
         args = vars(self.opt)
 
         print('------------ Options -------------')
@@ -97,6 +118,7 @@ class BaseOptions():
             opt_file.write('-------------- End ----------------\n')
 
         # save to database
+        print(self.isTrain)
         if self.opt.isTrain and not self.opt.continue_train:
             sql.new_experiment(args)
         return self.opt
