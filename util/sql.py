@@ -23,6 +23,7 @@ def close():
     """
     connection.close()
 
+
 def new_experiment(args):
     r"""
         Add a new experiment to database when it begins
@@ -31,10 +32,9 @@ def new_experiment(args):
         ----------
         args: # TODO:
     """
-
     c = connection.cursor()
     command = "INSERT INTO options VALUES ("
-    for _, v in sorted(args.items()):
+    for k, v in args.items():
         command += "'%s'," % str(v)
     command += "0)"
     try:
@@ -87,7 +87,7 @@ def find_experiment(opt):
         Returns
         -------
         str
-            name of the experiment
+            name of the experiment (None if there is no such experiment)
     """
     command = "SELECT MAX(name) FROM options WHERE "
     for o in relevant_options:
@@ -96,8 +96,10 @@ def find_experiment(opt):
     command += "beta == '%s'" % opt.beta
     c = connection.cursor()
     c.execute(command)
-    name = c.fetchone()[0]
-    return name
+    name = c.fetchone()
+    if name is None:
+        return None
+    return name[0]
 
 def find_info(name, cols, get_col_names=False):
     r"""
@@ -201,11 +203,16 @@ def get_test_result(name, epoch=None):
     """
     c = connection.cursor()
     if epoch is None:
-        c.execute("SELECT epoch, pos_err, ori_err FROM test WHERE name = ?", (name,))
+        c.execute("SELECT epoch, pos_err, ori_err FROM test WHERE name = ? ORDER BY epoch", (name,))
         return c.fetchall()
 
     c.execute("SELECT pos_err, ori_err FROM test WHERE name = ? AND epoch = ?", (name, epoch))
     return c.fetchone()
+
+def _delete_test(name, epoch):
+    c = connection.cursor()
+    c.execute("DELETE FROM test WHERE name = ? AND epoch = ?", (name, epoch))
+    connection.commit()
 
 def remove_empty_tests():
     c = connection.cursor()
@@ -213,18 +220,50 @@ def remove_empty_tests():
     connection.commit()
 
 
+def reinit_db(args):
+    c = connection.cursor()
+    args['last_epoch'] = 0
+    colnames = '(%s)' % ','.join((k for k in args))
+    c.execute("DROP TABLE IF EXISTS options_copy")
+    c.execute("CREATE TABLE options_copy %s" % colnames)
+    c.execute("SELECT DISTINCT name FROM options")
+    names = c.fetchall()
+    c.executemany("INSERT INTO options_copy (name) VALUES (?)", names)
+    for name, in names:
+        print(name)
+        data, cols = find_info(name, '*', get_col_names=True)
+        for i, col in enumerate(cols):
+            t = type(args[col])
+            d = data[i]
+            try:
+                if t == bool:
+                    d = int(bool(d))
+                elif t == float:
+                    d = float(d)
+                elif t == int:
+                    d = int(d)
+                elif t == str:
+                    d = str(d)
+                else:
+                    raise ValueError('Type %s not handled for element %s from column %s' % (str(t), str(data[i]), col))
+            except ValueError:
+                print(d, col, t)
+                raise ValueError
+            c.execute("UPDATE options_copy SET %s = ? WHERE name = ?" % col, (d, name))
+    connection.commit()
+
 if __name__ == '__main__':
     connect("./checkpoints")
     c = connection.cursor()
+    for row in c.execute("SELECT * FROM options_copy ORDER BY name"):
+        print(row)
     # c.execute('DELETE FROM options WHERE name = ""')
     # c.execute("UPDATE options SET last_epoch = 130 WHERE name = 'cloudcnn/2019-06-01_11:13'")
-    # for row in c.execute('SELECT n_points, sampling, criterion, name, last_epoch FROM options ORDER BY n_points'):
+    # for row in c.execute('SELECT n_points, beta, sampling, criterion, name, last_epoch FROM options ORDER BY name'):
     #     print(row)
     # print(find_info('cloudcnn/2019-05-28_09:09', '*', True))
     # for row in c.execute("""
-    #     SELECT test.name, sampling, criterion, epoch, pos_err, ori_err FROM test
-    #     JOIN options ON options.name = test.name
-    #     WHERE sampling = 'uni' AND n_points = '128'
+    #     SELECT * FROM test ORDER BY name
     # """):
     #     print(row)
     # connection.commit()
