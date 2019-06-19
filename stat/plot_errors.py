@@ -1,10 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
-
+sys.path.append('..')
 import util.sql as sql
 
 XLABEL = sys.argv[1] if len(sys.argv) > 1 else 'epoch'
+EPOCH_MAX = int(sys.argv[3]) if len(sys.argv) > 3 else float('inf')
+DIM = 0
 
 class Options():
     def __init__(self, options, n_points):
@@ -28,31 +30,15 @@ class Options():
         self.criterion = splitted[0]
         self.sampling = splitted[1]
 
-OPTIONS = ['mse-fps', 'geo-fps', 'mse-uni']
+def accuracy(loss):
+    return 1/(1+(loss/10))
 
-sql.connect('./checkpoints')
+OPTIONS = ['mse-fps', 'geo-fps', 'mse-uni', 'log-fps']
 
-data = np.zeros((3, 10, 30, 2))
-
-for o in range(len(OPTIONS)):
-    for i in range(6, 16):
-        opt = Options(OPTIONS[o], 2**i)
-        name = sql.find_experiment(opt)
-        if name is None:
-            continue
-        errors = np.array(sql.get_test_result(name))
-        if len(errors) == 0:
-            continue
-        epochs = (errors[:,0]//10).astype(int)
-        data[o,i-6,epochs] = errors[:,1:]
-
-sql.close()
-
-data = 1/(1+data)
-data[:,:,0] = 0
+sql.connect('../checkpoints')
 
 if XLABEL == 'n_points':
-    epoch = 50
+    epoch = int(sys.argv[2]) if len(sys.argv) > 2 else 50
     for o in range(len(OPTIONS)):
         plt.plot(np.arange(6,16), data[o,:,epoch//10,0], label=OPTIONS[o])
     plt.legend()
@@ -62,17 +48,36 @@ if XLABEL == 'n_points':
     plt.show()
 
 elif XLABEL == 'epoch':
-    n_points = 6
-    for o in range(len(OPTIONS)):
-        plt.plot(np.arange(0, 300, 10), data[o,n_points-6,:,0], label=OPTIONS[o])
-    plt.legend()
-    plt.title('Accuracy as a function of the number of epochs (n_points = %d)' % (2**n_points))
+    n_points = int(sys.argv[2]) if len(sys.argv) > 2 else 8192
+    xmax = 0
+    for o in OPTIONS:
+        name = sql.find_experiment(Options(o, n_points))
+        if name is None:
+            print('No experiment with such parameters: (%s,%d)' % (o, n_points))
+            continue
+        err = sql.get_test_result(name)
+        if err is None:
+            print('No experiment with such parameters: (%s,%d)' % (o, n_points))
+            continue
+        err = np.array(err)
+        err = err[err[:,1]!=None]
+        xmax = max(xmax, max(err[:,0]))
+        plt.plot(err[:,0], accuracy(err[:,DIM+1]), label=o)
+    sql.close()
+    xmax = min(xmax, EPOCH_MAX)
+    plt.plot([0,xmax], [1/1.1,1/1.1], ':', c='b', label='medX=1')
+    plt.plot([0,xmax], [0.5,0.5], ':', c='r', label='medX=10')
+    print(EPOCH_MAX)
+    plt.xlim(0,xmax)
+    plt.ylim(0,1)
+    plt.legend(loc='upper left')
+    plt.title('Accuracy as a function of the number of epochs (n_points = %d)' % (n_points))
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
     plt.show()
 
 elif XLABEL == 'both':
-    option = 0
+    option = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     for i in range(6, 16):
         plt.plot(np.arange(0, 300, 10), data[option,i-6,:,0], label=str(2**i))
     plt.legend()
