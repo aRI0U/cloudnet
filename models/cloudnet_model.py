@@ -5,8 +5,7 @@ import os
 import torch
 import torch.nn.functional as F
 
-import models.cloudnet as cloudnet
-from util.geometry import GeometricLoss
+from util.geometry import GeometricLoss, qlog
 
 class CloudNetModel():
     def name(self):
@@ -32,16 +31,18 @@ class CloudNetModel():
             assert(torch.cuda.is_available())
 
         if opt.model == 'cloudnet':
-            self.netG = cloudnet.CloudNet()
+            from models.cloudnet import CloudNet
+            self.netG = CloudNet(opt.input_nc, opt.output_nc, opt.n_points)
         elif opt.model == 'cloudcnn':
-            self.netG = cloudnet.CloudCNN(opt.input_nc, opt.n_points)
+            from models.cloudcnn import CloudCNN
+            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points)
         else:
             raise ValueError('Model [%s] does not exist' % model)
 
         if use_gpu:
             self.netG.cuda(self.gpu_ids[0])
 
-        if not self.isTrain or opt.continue_train:
+        if (not self.isTrain or opt.continue_train) and int(opt.which_epoch) > 0:
             self.load_network(self.netG, 'G', opt.which_epoch)
 
         if self.isTrain:
@@ -77,15 +78,16 @@ class CloudNetModel():
         # position loss
         self.loss_pos = self.mse(self.pred_Y[:,:3], self.input_Y[:,:3])
         # orientation loss
-        ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-        self.loss_ori = self.mse(self.pred_Y[:,3:], ori_gt) * 180 / pi
+        if self.opt.criterion == 'log':
+            self.loss_ori = self.mse(qlog(self.pred_Y[:,3:]), qlog(self.input_Y[:,3:]))
+        else:
+            ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
+            self.loss_ori = self.mse(self.pred_Y[:,3:], ori_gt) * 180 / pi
 
-        if self.opt.criterion == 'mse':
-            self.loss_G = self.loss_pos + self.opt.beta * self.loss_ori
-        elif self.opt.criterion == 'geo':
+        if self.opt.criterion == 'geo':
             self.loss_G = self.criterion(self.input_X[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
         else:
-            raise AttributeError('Criterion [%s] does not exist' % self.opt.criterion)
+            self.loss_G = self.loss_pos + self.opt.beta * self.loss_ori
         self.loss_G.backward()
 
     def optimize_parameters(self):
