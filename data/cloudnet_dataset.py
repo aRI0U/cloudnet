@@ -25,6 +25,11 @@ class CloudNetDataset(Dataset):
             reader = csv.DictReader(f)
             for row in reader:
                 img_number = row['name'][-5:]
+                if opt.split > 0:
+                    if (opt.isTrain or opt.phase == 'retrain') and int(img_number) % opt.split == 0:
+                        continue
+                    if opt.phase == 'val' and int(img_number) % opt.split != 0:
+                        continue
                 path = os.path.join(self.root, file_path % img_number)
                 # ignore the line if the point cloud doesn't exist
                 if not os.path.isfile(path):

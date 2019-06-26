@@ -48,10 +48,10 @@ for pth in os.listdir(checkpoints_dir):
     testepochs.append(epoch.group(1))
 
 for testepoch in sorted(testepochs, key = lambda s: '%6s' % s):
-    if sql.get_test_result(opt.name, int(testepoch)) is not None:
+    if sql.get_test_result(opt.name, opt.phase, int(testepoch)) is not None:
         continue
 
-    sql.new_test(opt.name, int(testepoch))
+    sql.new_test(opt.name, int(testepoch), opt.phase)
 
     try:
         model.load_network(model.netG, 'G', testepoch)
@@ -75,10 +75,13 @@ for testepoch in sorted(testepochs, key = lambda s: '%6s' % s):
             err.append([err_p, err_o])
 
         median_pos = np.median(err, axis=0)
-        sql.add_test_result(opt.name, int(testepoch), median_pos[0], median_pos[1])
+        sql.add_test_result(opt.name, int(testepoch), opt.phase, median_pos[0], median_pos[1])
 
     except KeyboardInterrupt:
         sql.remove_empty_tests()
+        test_file = os.path.join(results_dir, '%s_%s.txt' % (opt.phase, testepoch))
+        if os.path.isfile(test_file):
+            os.remove(test_file)
         raise KeyboardInterrupt
 
     if median_pos[0] < besterror[1]:

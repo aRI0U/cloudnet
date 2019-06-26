@@ -18,9 +18,9 @@ class BaseOptions():
         # self.required.add_argument('--dataroot', required=True, help='path to images')
         self.required.add_argument('--dataroot', default='./datasets/Carla/episode_000', help='path to point clouds')
         self.base.add_argument('--batchSize', type=int, default=32, help='input batch size')
-        self.base.add_argument('--beta', type=float, default=5, help='beta factor used in posenet.')
+        self.base.add_argument('--beta', type=float, default=5.0, help='beta factor used in posenet.')
         self.base.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
-        self.base.add_argument('--criterion', type=str, choices=['geo','mse'], default='mse', help='criterion used as loss')
+        self.base.add_argument('--criterion', type=str, choices=['geo','log','mse'], default='mse', help='criterion used as loss')
         self.base.add_argument('--dataset_mode', type=str, choices=['unaligned','aligned','single'], default='unaligned', help='the way datasets are loaded')
         self.base.add_argument('--db_dir', type=str, default=None, help='location of the database containing options infos')
         self.base.add_argument('--display_id', type=int, default=0, help='window id of the web display')
@@ -43,6 +43,7 @@ class BaseOptions():
         self.base.add_argument('--sampling', type=str, choices=['fps', 'uni'], default='fps', help='chooses whether points are sampled uniformly or by furthest distance')
         self.base.add_argument('--seed', type=int, default=0, help='initial random seed for deterministic results')
         self.base.add_argument('--serial_batches', action='store_true', help='if true, takes images in order to make batches, otherwise takes them randomly')
+        self.base.add_argument('--split', type=int, default=0, help='split dataset into training and validation set')
 
         self.initialized = True
 
@@ -58,7 +59,6 @@ class BaseOptions():
             id = int(str_id)
             if id >= 0:
                 self.opt.gpu_ids.append(id)
-
         # set gpu ids
         if len(self.opt.gpu_ids) > 0:
             torch.cuda.set_device(self.opt.gpu_ids[0])
@@ -84,8 +84,10 @@ class BaseOptions():
             if not self.isTrain or self.opt.continue_train:
                 print('Loading options from the experiment...', end='\t')
                 opt_vals, opt_names = sql.find_info(self.opt.name, '*', get_col_names=True)
+                if opt_vals is None:
+                    raise ValueError('There is no experiment with such a name: %s' % self.opt.name)
                 for i in range(len(opt_names)):
-                    if opt_names[i] in ['isTrain', 'gpu_ids','db_dir','name']:
+                    if opt_names[i] in ['isTrain', 'gpu_ids','db_dir','name','phase']:
                         continue
                     try:
                         opt_type = eval('type(self.opt.%s)' % opt_names[i])
@@ -101,6 +103,7 @@ class BaseOptions():
                 print('Done.')
 
         args = vars(self.opt)
+        sql.init_db(args)
 
         print('------------ Options -------------')
         for k, v in sorted(args.items()):
@@ -118,7 +121,6 @@ class BaseOptions():
             opt_file.write('-------------- End ----------------\n')
 
         # save to database
-        print(self.isTrain)
         if self.opt.isTrain and not self.opt.continue_train:
             sql.new_experiment(args)
         return self.opt
