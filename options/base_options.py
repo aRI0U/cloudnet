@@ -86,20 +86,20 @@ class BaseOptions():
                 opt_vals, opt_names = sql.find_info(self.opt.name, '*', get_col_names=True)
                 if opt_vals is None:
                     raise ValueError('There is no experiment with such a name: %s' % self.opt.name)
-                for i in range(len(opt_names)):
-                    if opt_names[i] in ['isTrain', 'gpu_ids','db_dir','name','phase']:
+                for i, opt in enumerate(opt_names):
+                    if opt in ['continue_train', 'isTrain', 'gpu_ids','db_dir','name','phase','niter']:
                         continue
                     try:
-                        opt_type = eval('type(self.opt.%s)' % opt_names[i])
+                        opt_type = eval('type(self.opt.%s)' % opt)
                     except AttributeError:
                         continue
-                    if opt_type == str:
-                        fmt = '"%s"'
+                    if opt_type == int:
+                        fmt = '%s'
                     elif opt_type == float:
                         fmt = 'float("%s")'
                     else:
-                        fmt = '%s'
-                    exec(('self.opt.%s = '+fmt) % (opt_names[i], opt_vals[i]))
+                        fmt = '"%s"'
+                    exec(('self.opt.%s = '+fmt) % (opt, opt_vals[i]))
                 print('Done.')
 
         args = vars(self.opt)

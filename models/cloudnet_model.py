@@ -56,9 +56,21 @@ class CloudNetModel():
             self.optimizers = []
             self.optimizer_G = torch.optim.Adam(self.netG.parameters(),
                                                 lr=opt.lr, eps=1,
-                                                weight_decay=0.0625,
+                                                weight_decay=0.001,
                                                 betas=(self.opt.adambeta1, self.opt.adambeta2))
             self.optimizers.append(self.optimizer_G)
+
+            self.scheduler = None
+
+            if opt.lr_policy == 'plateau':
+                self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    self.optimizer_G,
+                    mode='min',
+                    factor=0.1,
+                    patience=opt.lr_decay_iters,
+                    cooldown=0,
+                    verbose=True
+                )
             # for optimizer in self.optimizers:
             #     self.schedulers.append(networks.get_scheduler(optimizer, opt))
 
@@ -144,8 +156,8 @@ class CloudNetModel():
         network.load_state_dict(torch.load(save_path))
 
     # update learning rate (called once every epoch)
-    def update_learning_rate(self):
-        for scheduler in self.schedulers:
-            scheduler.step()
-        lr = self.optimizers[0].param_groups[0]['lr']
-        print('learning rate = %.7f' % lr)
+    def update_learning_rate(self, val_loss):
+        self.scheduler.step(val_loss)
+        print(val_loss)
+        print(self.scheduler.best)
+        return self.optimizers[0].param_groups[0]['lr']
