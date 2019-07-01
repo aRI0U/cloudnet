@@ -1,7 +1,126 @@
+import numpy as np
 import os
 import re
 import sqlite3
 import glob
+
+class Database():
+    # init operations
+    def __init__(self, path):
+        self.connection = None
+        self.c = None
+        self.path = path
+
+    def __enter__(self):
+        self.connection = sqlite3.connect(os.path.join(self.path, 'options.db'))
+        self.c = self.connection.cursor()
+        self._init_tables()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.connection.close()
+
+    # BASIC OPERATIONS
+
+    def _init_tables(self):
+        self.c.executescript("""
+            CREATE TABLE IF NOT EXISTS test (
+                name TEXT,
+                epoch INTEGER,
+                pos_err REAL,
+                ori_err REAL,
+                phase TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS tmp (
+                name TEXT,
+                epoch INTEGER,
+                phase TEXT
+            );
+        """)
+        self.connection.commit()
+
+    def _exec(self, *args):
+        self.c.execute(*args)
+
+    def _new_row(self, name):
+        self.c.execute("INSERT INTO options (name) VALUES ?", (name,))
+
+    def _update(self, name, col, value):
+        self.c.execute("UPDATE options SET %s = ? WHERE name = ?" % col, (name, value))
+
+    def commit(self):
+        self.connection.commit()
+
+    def new_experiment(self, args):
+        name = args['name']
+        self._new_row(name)
+        for k in args:
+            self._update(name, k, args[k])
+
+    def find_experiment(self, args):
+        query = "SELECT MAX(name) FROM options WHERE "
+        keys = []
+        vals = []
+        for k in args:
+            keys.append('%s = ?' % k)
+            vals.append(args[k])
+        query += ' AND '.join(keys)
+        self.c.execute(query, tuple(vals))
+        name = self.c.fetchone()
+        if name is None:
+            return None
+        return name[0]
+
+    def update_last_epoch(self, name, epoch):
+        self._update(name, 'last_epoch', epoch)
+
+
+    ## TEST METHODS
+
+    def test_results(self, name, phase=None, epoch=None):
+        query = "SELECT epoch, pos_err, ori_err FROM test WHERE name = ?"
+        if phase is None:
+            if epoch is None:
+                self.c.execute(query + " ORDER BY epoch", (name,))
+            else:
+                self.c.execute(query + " AND epoch = ? ORDER BY epoch", (name,epoch))
+        else:
+            if epoch is None:
+                self.c.execute(query + " AND phase = ? ORDER BY epoch", (name,phase))
+            else:
+                self.c.execute(query + " AND phase = ? AND epoch = ? ORDER BY epoch", (name, phase, epoch))
+        res = self.c.fetchall()
+        if len(res) == 0:
+            # print('# TODO: warnings')
+            return None
+        return np.array(res)
+
+    def new_test(self, name, epoch, phase):
+        self.c.execute("INSERT INTO tmp (name, epoch, phase) VALUES (?,?,?)", (name, epoch, phase))
+
+    def add_test_result(self, name, epoch, phase, pos_err, ori_err):
+        self._exec("INSERT INTO test (name, epoch, phase, pos_err, ori_err) VALUES (?,?,?,?,?)", (name, epoch, phase, pos_err, ori_err))
+
+    def remove_tmp_test(self, name, epoch, phase):
+        self._exec("DELETE FROM tmp WHERE name = ? AND epoch = ? AND phase = ?", (name, epoch, phase))
+
+    def is_test(self, name, epoch, phase):
+        self._exec("SELECT name FROM test WHERE name = ? AND epoch = ? AND phase = ?", (name, epoch, phase))
+        if self.c.fetchone() is not None:
+            return True
+        self._exec("SELECT name FROM tmp WHERE name = ? AND epoch = ? AND phase = ?", (name, epoch, phase))
+        return self.c.fetchone() is not None
+
+
+
+
+
+
+
+
+
+
 
 relevant_options = ['batchSize', 'criterion', 'dataset_mode','input_nc','model','no_dropout','n_points', 'output_nc', 'sampling', 'seed', 'serial_batches', 'split']
 
@@ -162,6 +281,11 @@ def update_last_epoch(epoch, name):
     c.execute("UPDATE options SET last_epoch = ? WHERE name = ?", (epoch, name))
     connection.commit()
 
+def update_lr(lr, name):
+    c = connection.cursor()
+    c.execute("UPDATE options SET lr = ? WHERE name = ?", (lr, name))
+    connection.commit()
+
 def init_test_db():
     r"""
         Create (if not exists) the database containing test results
@@ -301,10 +425,11 @@ if __name__ == '__main__':
     # # for row in c.execute('SELECT n_points, beta, sampling, criterion, name, last_epoch FROM options ORDER BY name'):
     # #     print(row)
     # # print(find_info('cloudcnn/2019-05-28_09:09', '*', True))
-    # c.execute("UPDATE options SET beta = 1 WHERE beta = '1.0'")
-    for row in c.execute("""
-        SELECT * FROM test ORDER BY name
-    """):
-        print(row)
+    # c.execute("UPDATE options SET last_epoch = 500 WHERE name = 'cloudnet/2019-06-27_14:17'")
+    # for row in c.execute("""
+    #     SELECT  FROM options WHERE name = 'cloudnet/2019-06-27_14:17'
+    # """):
+    #     print(row)
+    # remove_empty_tests()
     # connection.commit()
     close()

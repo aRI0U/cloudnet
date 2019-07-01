@@ -32,8 +32,7 @@ class Visualizer():
                     now = time.strftime("%c")
                     log_file.write('================ Training Loss (%s) ================\n' % now)
         else:
-            self.log_name = None # os.path.join(opt.results_dir, opt.name, '%s_%s.txt' % (opt.phase, opt.which_epoch))
-
+            self.log_name = None
     def reset(self):
         self.saved = False
 
@@ -154,6 +153,7 @@ class Visualizer():
     def change_log_path(self, which_epoch):
         self.log_name = os.path.join(self.opt.results_dir,
                                      self.opt.name,
+                                     'tmp',
                                      '%s_%s.txt' % (self.opt.phase, which_epoch))
 
     def save_estimated_pose(self, image_path, pose):
