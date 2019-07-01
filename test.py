@@ -33,9 +33,9 @@ testfile = open(os.path.join(results_dir, 'test_median.txt'), 'a')
 testfile.write('epoch medX  medQ\n')
 testfile.write('==================\n')
 
-if opt.which_epoch == 'latest':
-    last_epoch = sql.find_info(opt.name, 'last_epoch')[0]
-    opt.which_epoch = str(last_epoch)
+# if opt.which_epoch == 'latest':
+#     last_epoch = sql.find_info(opt.name, 'last_epoch')[0]
+#     opt.which_epoch = str(last_epoch)
 
 model = create_model(opt)
 visualizer = Visualizer(opt)

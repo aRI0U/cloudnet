@@ -5,7 +5,7 @@ import os
 import torch
 import torch.nn.functional as F
 
-from util.geometry import GeometricLoss, qlog
+from util.geometry import GeometricLoss
 
 class CloudNetModel():
     def name(self):
@@ -42,7 +42,7 @@ class CloudNetModel():
         if use_gpu:
             self.netG.cuda(self.gpu_ids[0])
 
-        if (not self.isTrain or opt.continue_train) and int(opt.which_epoch) > 0:
+        if self.isTrain and opt.continue_train and int(opt.which_epoch) > 0:
             self.load_network(self.netG, 'G', opt.which_epoch)
 
         if self.isTrain:
@@ -87,19 +87,14 @@ class CloudNetModel():
         self.pred_Y = self.netG(self.input_X)
 
     def backward(self):
-        # position loss
-        self.loss_pos = self.mse(self.pred_Y[:,:3], self.input_Y[:,:3])
-        # orientation loss
-        if self.opt.criterion == 'log':
-            self.loss_ori = self.mse(qlog(self.pred_Y[:,3:]), qlog(self.input_Y[:,3:]))
-        else:
-            ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-            self.loss_ori = self.mse(self.pred_Y[:,3:], ori_gt) * 180 / pi
-
         if self.opt.criterion == 'geo':
+            self.loss_pos = torch.tensor(0)
+            self.loss_ori = torch.tensor(0)
             self.loss_G = self.criterion(self.input_X[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
         else:
-            self.loss_G = self.loss_pos + self.opt.beta * self.loss_ori
+            self.loss_pos = self.criterion(self.pred_Y[:,:3], self.input_Y[:,:3])
+            self.loss_ori = self.criterion(self.pred_Y[:,3:], self.input_Y[:,3:])
+            self.loss_G = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
         self.loss_G.backward()
 
     def optimize_parameters(self):

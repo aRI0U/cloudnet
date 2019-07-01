@@ -12,6 +12,6 @@ class TestOptions(BaseOptions):
         self.test.add_argument('--ntest', type=int, default=float("inf"), help='# of test examples.')
         self.test.add_argument('--phase', type=str, default='test', help='train, val, test, etc')
         self.test.add_argument('--results_dir', type=str, default='./results/', help='saves results here.')
-        self.test.add_argument('--which_epoch', type=str, default='latest', help='which epoch to load? set to latest to use latest cached model')
+        # self.test.add_argument('--which_epoch', type=str, default='latest', help='which epoch to load? set to latest to use latest cached model')
 
         self.isTrain = False
