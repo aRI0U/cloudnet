@@ -28,7 +28,7 @@ os.makedirs(os.path.join(results_dir, 'tmp'), exist_ok=True)
 
 besterror  = [0, float('inf'), float('inf')] # nepoch, medX, medQ
 
-testfile = open(os.path.join(results_dir, 'test_median.txt'), 'a')
+testfile = open(os.path.join(results_dir, '%s_median.txt' % opt.phase), 'a')
 testfile.write('epoch medX  medQ\n')
 testfile.write('==================\n')
 
@@ -42,9 +42,9 @@ for pth in os.listdir(checkpoints_dir):
         continue
     testepochs.append(epoch.group(1))
 
-with Database('./checkpoints') as db:
+with Database(opt.db_dir) as db:
     for testepoch in sorted(testepochs, key = lambda s: '%6s' % s):
-        test_pkey = (opt.name, int(testepoch), opt.phase)
+        test_pkey = (opt.ID, int(testepoch), opt.phase)
         if db.is_test(*test_pkey):
             continue
         db.new_test(*test_pkey)
@@ -52,7 +52,7 @@ with Database('./checkpoints') as db:
 
         try:
             print("epoch: %s" % testepoch)
-            model.load_network(model.netG, 'G', testepoch)
+            model.load(testepoch)
             visualizer.change_log_path(testepoch)
             err = []
 

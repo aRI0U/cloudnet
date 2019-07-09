@@ -10,11 +10,8 @@ from torch import manual_seed
 from options.train_options import TrainOptions
 from data.data_loader import create_data_loader
 from models.models import create_model
-import util.sql as sql
+from util.sql import Database
 from util.visualizer import Visualizer
-
-# open connection with database
-sql.connect("./checkpoints")
 
 opt = TrainOptions().parse()
 
@@ -23,6 +20,7 @@ manual_seed(opt.seed)
 seed(opt.seed)
 random.seed(opt.seed)
 torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 ## LOADING DATA
 data_loader = create_data_loader(opt)
@@ -32,7 +30,8 @@ print('#training images = %d' % dataset_size)
 
 if opt.continue_train:
     if opt.which_epoch == 'latest':
-        opt.epoch_count = sql.find_info(opt.name, 'last_epoch')[0]+1
+        with Database(opt.db_dir) as db:
+            opt.epoch_count = db.get_last_epoch(opt.ID)+1
         opt.which_epoch = str(opt.epoch_count-1)
     else:
         opt.epoch_count = int(opt.which_epoch)+1
@@ -77,7 +76,10 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         print('saving the model at the end of epoch %d, iters %d' %
               (epoch, total_steps))
         model.save(epoch)
-        sql.update_last_epoch(epoch, opt.name)
+
+        with Database(opt.db_dir) as db:
+            db.update_last_epoch(opt.ID, epoch)
+            db.commit()
 
     print('End of epoch %d / %d \t Time Taken: %d sec \t Learning rate: %s' %
           (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time, str(lr)))
@@ -85,7 +87,6 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
     if opt.lr_policy is not None:
         tmp = model.update_learning_rate(np.median(mean_errs[:(epoch-opt.epoch_count+1)]))
         if tmp < lr:
+            # TODO: sql update lr
             lr = tmp
             sql.update_lr(lr, opt.name)
-
-sql.close()
