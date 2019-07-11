@@ -45,7 +45,7 @@ class BaseOptions():
         self.base.add_argument('--n_points', default=16384, type=int, help='# points considered per point cloud')
         self.base.add_argument('--output_nc', type=int, default=7, help='# of output image channels')
         self.base.add_argument('--resize_or_crop', type=str, default='scale_width_and_crop', help='scaling and cropping of images at load time [resize_and_crop|crop|scale_width|scale_width_and_crop]')
-        self.base.add_argument('--sampling', type=str, choices=['fps', 'uni'], default='fps', help='chooses whether points are sampled uniformly or by furthest distance')
+        self.base.add_argument('--sampling', type=str, choices=['fps', 'uni'], default='fps', help='chooses whether points are sampled uniformly or by farthest point sampling')
         self.param.add_argument('--seed', type=int, default=0, help='initial random seed for deterministic results')
         self.base.add_argument('--serial_batches', action='store_true', help='if true, takes images in order to make batches, otherwise takes them randomly')
         self.base.add_argument('--split', type=int, default=0, help='split dataset into training and validation set')
@@ -103,12 +103,16 @@ class BaseOptions():
                         opt_type = eval('type(self.opt.%s)' % opt)
                         if opt_vals[i] is None:
                             fmt = '%s'
+                        elif opt_type == bool:
+                            fmt = 'bool(%s)'
                         elif opt_type == int:
                             fmt = '%s'
                         elif opt_type == float:
                             fmt = 'float("%s")'
-                        else:
+                        elif opt_type == str:
                             fmt = '"%s"'
+                        else:
+                            raise TypeError("Unparsed type: %s" % str(type))
                         exec(('self.opt.%s = '+fmt) % (opt, opt_vals[i]))
                     print('Done.')
                 if self.opt.ID is None:
