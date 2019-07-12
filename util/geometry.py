@@ -3,6 +3,8 @@ import time
 import unittest
 
 import torch
+from torch._jit_internal import weak_module, weak_script_method
+from torch.nn.modules.loss import _Loss
 
 def normalize(Y):
     Y[...,3:] = Y[...,3:] / torch.norm(Y[...,3:],p=2,dim=1).unsqueeze(1)
@@ -13,7 +15,7 @@ def euler_to_quaternion(theta, phi, psi):
     r"""
         converts an orientation represented by Euler angles into a unitary quaternion
     """
-    return torch.Tensor([
+    return torch.tensor([
         cos(phi)*cos(theta)*cos(psi) + sin(phi)*sin(theta)*sin(psi),
         sin(phi)*cos(theta)*cos(psi) - cos(phi)*sin(theta)*sin(psi),
         cos(phi)*sin(theta)*cos(psi) + sin(phi)*cos(theta)*sin(psi),
@@ -43,7 +45,7 @@ def _quaternion_to_matrix(Q):
         2*(qi*qk - qj*qr), 2*(qj*qk + qi*qr), 1 - 2*(qi**2 + qj**2)
     ]).transpose(0,1).reshape(-1,3,3)
 
-def geometric_loss(input_X, input_Y, pred_Y, p=2):
+def geometric_loss(input_X, input_Y, pred_Y, p=2, reduction='mean'):
     # type: (torch.cuda.FloatTensor, torch.cuda.FloatTensor, int) -> torch.cuda.FloatTensor
     r"""
         Geometric loss between two configurations on point cloud [input_X]
@@ -70,13 +72,39 @@ def geometric_loss(input_X, input_Y, pred_Y, p=2):
     input_mat = _quaternion_to_matrix(input_ori).cuda()
     pred_mat = _quaternion_to_matrix(pred_ori).cuda()
     # computing estimated global coords of points
-    # print(input_mat.shape, input_X.shape, input_pos.unsqueeze(2).shape)
     input_glob = input_mat @ input_X + input_pos.unsqueeze(2)
     pred_glob = pred_mat @ input_X + pred_pos.unsqueeze(2)
-    diff = input_glob - pred_glob
-    return torch.mean(torch.norm(diff, p=p, dim=1))
+    if reduction == 'mean':
+        return torch.mean(torch.norm(input_glob - pred_glob, p=p, dim=1))
+    if reduction == 'sum':
+        return torch.sum(torch.norm(input_glob - pred_glob, p=p, dim=1))
+    return torch.norm(diff, p=p, dim=1)
 
-def geometric_loss_no_cuda(input_X, input_Y, pred_Y, p=2):
+@weak_module
+class GeometricLoss(_Loss):
+    def __init__(self, p=2, size_average=None, reduce=None, reduction='mean'):
+        super(GeometricLoss, self).__init__(size_average, reduce, reduction)
+        self.p = p
+
+    @weak_script_method
+    def forward(self, pc, input, target):
+        return geometric_loss(pc, input, target, self.p, reduction=self.reduction)
+
+def qlog(q):
+    n = torch.norm(q[:,1:], p=2, dim=1, keepdim=True)
+    n = torch.clamp(n, min=1e-8)
+    q = q[:,1:] * torch.acos(torch.clamp(q[:,:1], min=-1.0, max=1.0))
+    q = q / n
+    return q
+
+
+
+
+
+
+
+
+def geometric_loss_no_cuda(input_X, input_Y, pred_Y, p=2, reduction='mean'):
     batch_size = len(input_X)
     input_pos, pred_pos = input_Y[:,:3], pred_Y[:,:3]
     input_ori, pred_ori = input_Y[:,3:], pred_Y[:,3:]
@@ -85,8 +113,11 @@ def geometric_loss_no_cuda(input_X, input_Y, pred_Y, p=2):
     # computing estimated global coords of points
     input_glob = input_mat @ input_X + input_pos.unsqueeze(2)
     pred_glob = pred_mat @ input_X + pred_pos.unsqueeze(2)
-    diff = input_glob - pred_glob
-    return torch.mean(torch.norm(diff, p=p, dim=1))
+    if reduction == 'mean':
+        return torch.mean(torch.norm(input_glob - pred_glob, p=p, dim=1))
+    if reduction == 'sum':
+        return torch.sum(torch.norm(input_glob - pred_glob, p=p, dim=1))
+    return torch.norm(diff, p=p, dim=1)
 
 ## tests on loss function
 class TestLossFunction(unittest.TestCase):
