@@ -2,14 +2,15 @@ import torch
 import torch.nn as nn
 
 class Net(nn.Module):
-    def __init__(self, input_nc, output_nc, n_points):
+    def __init__(self, input_nc, output_nc, n_points, use_gpu=True):
         super(Net, self).__init__()
         self.input_nc = input_nc
         self.output_nc = output_nc
         self.n_points = n_points
+        self.use_gpu = use_gpu
 
     @staticmethod
-    def _batch_indicator(batch_size, npoint):
+    def _batch_indicator(batch_size, npoint, use_gpu=True):
         # type: (int, int) -> torch.cuda.LongTensor
         r"""
             Returns a tensor whose each index i is the batch of the point i
@@ -31,7 +32,10 @@ class Net(nn.Module):
             tensor([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3])
         """
         z = torch.zeros(batch_size, npoint, dtype=torch.long)
-        return (z + torch.arange(batch_size).unsqueeze(1)).view(-1).cuda()
+        if use_gpu:
+            return (z + torch.arange(batch_size).unsqueeze(1)).view(-1).cuda()
+        return (z + torch.arange(batch_size).unsqueeze(1)).view(-1)
+
 
     @staticmethod
     def _split_point_cloud(pc):
@@ -66,6 +70,6 @@ class Net(nn.Module):
             Returns
             -------
             torch.cuda.FloatTensor
-                (B,7) tensor containing estimated configurations
+                (B,output_nc) tensor containing estimated configurations
         """
         raise NotImplementedError
