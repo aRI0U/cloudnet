@@ -68,6 +68,11 @@ class Database():
                 epoch INTEGER DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS branches (
+                id INTEGER,
+                branch TEXT DEFAULT 'master'
+            );
+
             CREATE TABLE IF NOT EXISTS test (
                 id INTEGER,
                 epoch INTEGER,
@@ -107,6 +112,12 @@ class Database():
                 continue
             # self._exec('SELECT * FROM opts WHERE id = ?', (id,))
         self._new_row('last_epochs', id)
+        self._new_row('branches', id)
+        head = os.path.join('.git', 'HEAD')
+        if os.path.isfile(head):
+            with open(head) as f:
+                branch = f.read().split('/')[-1]
+                self._exec("UPDATE branches SET branch = ? WHERE id = ?", (branch,id))
         return id
 
     def find_experiment(self, **kwargs):
