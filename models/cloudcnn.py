@@ -60,12 +60,12 @@ class CloudCNN(Net):
         self.xconv2 = XConvolution(32, 64, 96, 128, ceil(n_points/4))
         self.xconv3 = XConvolution(128, 256, 384, 512, ceil(n_points/16))
 
-        self.conv = nn.Conv1d(ceil(n_points/64), 1, 1)
+        self.conv = nn.Conv1d(ceil(n_points/64), 3, 1)
 
         self.fc = nn.Sequential(
             nn.Linear(512, 64),
             nn.ReLU(),
-            nn.Linear(64, output_nc)
+            nn.Linear(64, output_nc+2)
         )
 
 
@@ -79,9 +79,9 @@ class CloudCNN(Net):
         # assign to channels
         x = self.fc(x)
         # merge into one output vector
-        x = self.conv(x).view(B, self.output_nc)
+        x = self.conv(x).view(B, 3, self.output_nc+2)
         # normalize quaterions
-        output = torch.cat((x[...,:3], F.normalize(x[...,3:], p=2, dim=-1)), dim=-1)
+        output = torch.cat((x[...,:3], F.normalize(x[...,3:self.output_nc], p=2, dim=-1), x[...,self.output_nc:]), dim=-1)
         return output
 
 
