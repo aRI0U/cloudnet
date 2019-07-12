@@ -91,8 +91,8 @@ class CloudNetModel():
         # print(alpha)
         # print(sigma)
         # print(torch.exp(-self.criterion(pred_pos, input_pos)/(2*sigma**2)))
-        self.loss_pos = -torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.exp(torch.clamp(-self.criterion(pred_pos, input_pos)/(2*sigma**2), min=-100)), dim=-1)))
-        self.loss_ori = -torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.exp(-self.criterion(pred_ori, input_ori)/(2*sigma**2)), dim=-1)))
+        self.loss_pos = -torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.clamp(torch.exp(-self.criterion(pred_pos, input_pos)/(2*sigma**2)), min=1e-18), dim=-1)))
+        self.loss_ori = -torch.sum(torch.log(torch.sum(alpha * torch.exp(-self.criterion(pred_ori, input_ori)/(2*sigma**2)), dim=-1)))
         self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
 
         self.loss.backward()
