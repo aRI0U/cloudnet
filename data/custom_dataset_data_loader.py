@@ -1,5 +1,6 @@
-from torch import manual_seed
 import torch.utils.data
+
+from util.util import manual_seed
 
 def CreateDataset(opt):
     from data.cloudnet_dataset import CloudNetDataset
@@ -8,14 +9,13 @@ def CreateDataset(opt):
     dataset.initialize(opt)
     return dataset
 
-
 class CustomDatasetDataLoader():
     def __init__(self, opt):
         self.opt = opt
         self.dataset = CreateDataset(opt)
 
         def init_fn(worker_id):
-            manual_seed(opt.seed)
+            manual_seed(opt)
 
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,

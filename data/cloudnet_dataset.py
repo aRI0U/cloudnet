@@ -13,7 +13,6 @@ class CloudNetDataset(Dataset):
         self.root = opt.dataroot
         driving_data = os.path.join(self.root, 'driving_data.csv')
         # select the folder corresponding to the right input type
-        file_path = None
         file_path = os.path.join('PointCloudLocal1', 'point_cloud_%s.npy')
         self.mean_image = None #np.load(os.path.join(self.root , 'mean_image.npy'))
         self.A_paths = []
