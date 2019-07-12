@@ -6,6 +6,7 @@ import pickle
 import torch
 import torch.nn.functional as F
 
+import util.util as util
 from util.geometry import GeometricLoss
 
 class CloudNetModel():
@@ -88,15 +89,13 @@ class CloudNetModel():
         self.pred_Y = self.netG(self.input_X)
 
     def backward(self):
-        if self.opt.criterion == 'geo':
-            self.loss_pos = torch.tensor(0)
-            self.loss_ori = torch.tensor(0)
-            self.loss = self.criterion(self.input_X[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
-
-        else:
-            self.loss_pos = self.criterion(self.pred_Y[:,:3], self.input_Y[:,:3])
-            self.loss_ori = self.criterion(self.pred_Y[:,3:], self.input_Y[:,3:])
-            self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
+        pred_pos, input_pos = self.pred_Y[...,:3], self.input_Y[:,:3].unsqueeze(1)
+        pred_ori, input_ori = self.pred_Y[...,3:self.opt.output_nc], self.input_Y[:,3:self.opt.output_nc].unsqueeze(1)
+        sigma = torch.exp(self.pred_Y[...,-2])
+        alpha = F.softmax(self.pred_Y[...,-1])
+        self.loss_pos = torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.exp(-F.mse_loss(pred_pos - input_pos, dim=-1)/(2*sigma**2)), dim=-1)))
+        self.loss_ori = torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.exp(-F.mse_loss(pred_ori - input_ori, dim=-1)/(2*sigma**2)), dim=-1)))
+        self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
 
         self.loss.backward()
 
