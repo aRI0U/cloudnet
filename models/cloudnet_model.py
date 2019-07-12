@@ -48,13 +48,7 @@ class CloudNetModel():
         if self.isTrain:
             self.old_lr = opt.lr
             # define loss functions
-            self.criterion = None
-            if self.opt.criterion == 'geo':
-                self.criterion = GeometricLoss()
-            elif self.opt.criterion == 'multi':
-                self.criterion = torch.nn.MSELoss(reduction='none')
-            else:
-                self.criterion = torch.nn.MSELoss()
+            self.criterion = lambda x,y: torch.mean(F.mse_loss(x, y, reduction='none'), dim=-1)
 
             self.optimizer = torch.optim.Adam(self.netG.parameters(),
                                                 lr=opt.lr, eps=1,
@@ -92,9 +86,13 @@ class CloudNetModel():
         pred_pos, input_pos = self.pred_Y[...,:3], self.input_Y[:,:3].unsqueeze(1)
         pred_ori, input_ori = self.pred_Y[...,3:self.opt.output_nc], self.input_Y[:,3:self.opt.output_nc].unsqueeze(1)
         sigma = torch.exp(self.pred_Y[...,-2])
-        alpha = F.softmax(self.pred_Y[...,-1])
-        self.loss_pos = torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.exp(-F.mse_loss(pred_pos - input_pos, dim=-1)/(2*sigma**2)), dim=-1)))
-        self.loss_ori = torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.exp(-F.mse_loss(pred_ori - input_ori, dim=-1)/(2*sigma**2)), dim=-1)))
+        alpha = F.softmax(self.pred_Y[...,-1], dim=-1)
+        # print(-self.criterion(pred_pos, input_pos))
+        # print(alpha)
+        # print(sigma)
+        # print(torch.exp(-self.criterion(pred_pos, input_pos)/(2*sigma**2)))
+        self.loss_pos = -torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.exp(torch.clamp(-self.criterion(pred_pos, input_pos)/(2*sigma**2), min=-100)), dim=-1)))
+        self.loss_ori = -torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.exp(-self.criterion(pred_ori, input_ori)/(2*sigma**2)), dim=-1)))
         self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
 
         self.loss.backward()
