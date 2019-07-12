@@ -4,11 +4,21 @@ import numpy as np
 from PIL import Image
 import inspect, re
 import numpy as np
+import pickle
 import os
 import collections
 
 # Converts a Tensor into a Numpy array
 # |imtype|: the desired type of the converted numpy array
+def manual_seed(opt):
+    # if opt.continue_train:
+    #     with open(os.path.join(opt.checkpoints_dir, opt.name, 'RNG'), 'rb') as f:
+    #         torch.set_rng_state(pickle.load(f))
+    # else:
+    #     torch.manual_seed(opt.seed)
+    torch.manual_seed(opt.seed)
+
+
 def tensor2im(image_tensor, imtype=np.uint8):
     image_numpy = image_tensor[0].cpu().float().numpy()
     if image_numpy.shape[0] == 1:

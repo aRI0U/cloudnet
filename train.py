@@ -5,18 +5,19 @@ import random
 import time
 
 import torch.backends.cudnn
-from torch import manual_seed
 
 from options.train_options import TrainOptions
 from data.data_loader import create_data_loader
 from models.models import create_model
 from util.sql import Database
+from util.util import manual_seed
 from util.visualizer import Visualizer
 
 opt = TrainOptions().parse()
 
 ## SEEDING
-manual_seed(opt.seed)
+manual_seed(opt)
+
 seed(opt.seed)
 random.seed(opt.seed)
 torch.backends.cudnn.deterministic = True
@@ -41,12 +42,14 @@ visualizer = Visualizer(opt)
 total_steps = 0
 lr = opt.lr
 
+model.netG.train()
+
 print('\n----------------- Training ------------------')
-mean_errs = np.zeros(30)
+
 for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
     epoch_start_time = time.time()
     epoch_iter = 0
-    mean_err = 0
+    loss = []
     for i, batch in enumerate(dataset):
         iter_start_time = time.time()
         visualizer.reset()
@@ -55,22 +58,20 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         model.set_input(batch)
         model.optimize_parameters()
 
-        # if total_steps % opt.display_freq == 0:
-        #     save_result = total_steps % opt.update_html_freq == 0
-        #     visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
+        if total_steps % opt.display_freq == 0:
+            save_result = total_steps % opt.update_html_freq == 0
+            visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
         if total_steps % opt.print_freq == 0:
             errors = model.get_current_errors()
-            mean_err += errors['geom_err']
             t = (time.time() - iter_start_time) / opt.batchSize
             visualizer.print_current_errors(epoch, epoch_iter, errors, t)
             if opt.display_id > 0:
                 visualizer.plot_current_errors(epoch, float(epoch_iter)/dataset_size, opt, errors)
-        # if total_steps % opt.save_latest_freq == 0:
-        #     print('saving the latest model (epoch %d, total_steps %d)' %
-        #           (epoch, total_steps))
-        #     model.save('latest')
-    mean_errs[(epoch-opt.epoch_count)%30] = mean_err
+        if total_steps % opt.save_latest_freq == 0:
+            print('saving the latest model (epoch %d, total_steps %d)' %
+                  (epoch, total_steps))
+            model.save('latest')
 
     if epoch % opt.save_epoch_freq == 0:
         print('saving the model at the end of epoch %d, iters %d' %

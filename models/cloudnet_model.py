@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from math import pi
 import os
+import pickle
 
 import torch
 import torch.nn.functional as F
@@ -35,44 +36,44 @@ class CloudNetModel():
             self.netG = CloudNet(opt.input_nc, opt.output_nc, opt.n_points)
         elif opt.model == 'cloudcnn':
             from models.cloudcnn import CloudCNN
-            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points)
+            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points, use_gpu=use_gpu)
         else:
             raise ValueError('Model [%s] does not exist' % model)
 
         if use_gpu:
             self.netG.cuda(self.gpu_ids[0])
 
-        if self.isTrain and opt.continue_train and int(opt.which_epoch) > 0:
-            self.load_network(self.netG, 'G', opt.which_epoch)
 
         if self.isTrain:
             self.old_lr = opt.lr
             # define loss functions
-            self.mse = torch.nn.MSELoss()
-            self.criterion = GeometricLoss() if self.opt.criterion == 'geo' else self.mse
+            self.criterion = None
+            if self.opt.criterion == 'geo':
+                self.criterion = GeometricLoss()
+            elif self.opt.criterion == 'multi':
+                self.criterion = torch.nn.MSELoss(reduction='none')
+            else:
+                self.criterion = torch.nn.MSELoss()
 
-            # initialize optimizers
-            self.schedulers = []
-            self.optimizers = []
-            self.optimizer_G = torch.optim.Adam(self.netG.parameters(),
+            self.optimizer = torch.optim.Adam(self.netG.parameters(),
                                                 lr=opt.lr, eps=1,
                                                 weight_decay=0.001,
                                                 betas=(self.opt.adambeta1, self.opt.adambeta2))
-            self.optimizers.append(self.optimizer_G)
 
             self.scheduler = None
 
-            if opt.lr_policy == 'plateau':
-                self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                    self.optimizer_G,
-                    mode='min',
-                    factor=0.1,
-                    patience=opt.lr_decay_iters,
-                    cooldown=0,
-                    verbose=True
-                )
-            # for optimizer in self.optimizers:
-            #     self.schedulers.append(networks.get_scheduler(optimizer, opt))
+            # if opt.lr_policy == 'plateau':
+            #     self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            #         self.optimizer,
+            #         mode='min',
+            #         factor=0.1,
+            #         patience=opt.lr_decay_iters,
+            #         cooldown=0,
+            #         verbose=True
+            #     )
+
+            if opt.continue_train and int(opt.which_epoch) > 0:
+                self.load(opt.which_epoch)
 
         print('---------- Networks initialized -------------')
 
@@ -90,18 +91,20 @@ class CloudNetModel():
         if self.opt.criterion == 'geo':
             self.loss_pos = torch.tensor(0)
             self.loss_ori = torch.tensor(0)
-            self.loss_G = self.criterion(self.input_X[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
+            self.loss = self.criterion(self.input_X[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
+
         else:
             self.loss_pos = self.criterion(self.pred_Y[:,:3], self.input_Y[:,:3])
             self.loss_ori = self.criterion(self.pred_Y[:,3:], self.input_Y[:,3:])
-            self.loss_G = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
-        self.loss_G.backward()
+            self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
+
+        self.loss.backward()
 
     def optimize_parameters(self):
+        self.optimizer.zero_grad()
         self.forward()
-        self.optimizer_G.zero_grad()
         self.backward()
-        self.optimizer_G.step()
+        self.optimizer.step()
 
     # no backprop gradients
     def test(self):
@@ -115,12 +118,12 @@ class CloudNetModel():
         if self.opt.isTrain:
             return OrderedDict([('pos_err', self.loss_pos.item()),
                                 ('ori_err', self.loss_ori.item()),
-                                ('geom_err', self.loss_G.item()),
+                                ('geom_err', self.loss.item()),
                                 ])
 
         pos_err = torch.dist(self.pred_Y[:,:3], self.input_Y[:,:3])
         ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-        abs_distance = torch.abs((ori_gt.mul(self.pred_Y[:,3:])).sum())
+        abs_distance = torch.abs((ori_gt.mul(self.pred_Y[:,3:self.opt.output_nc])).sum())
         ori_err = 2*180/pi * torch.acos(abs_distance)
         return [pos_err.item(), ori_err.item()]
 
@@ -133,22 +136,35 @@ class CloudNetModel():
         # input_Y = util.tensor2im(self.input_Y.data)
         return OrderedDict([('input_X', input_X)])
 
-    def save(self, label):
-        self.save_network(self.netG, 'G', label, self.gpu_ids)
 
-    # helper saving function that can be used by subclasses
-    def save_network(self, network, network_label, epoch_label, gpu_ids):
-        save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
-        save_path = os.path.join(self.save_dir, save_filename)
-        torch.save(network.cpu().state_dict(), save_path)
-        if len(gpu_ids) and torch.cuda.is_available():
-            network.cuda(gpu_ids[0])
 
-    # helper loading function that can be used by subclasses
-    def load_network(self, network, network_label, epoch_label):
-        save_filename = '%s_net_%s.pth' % (epoch_label, network_label)
-        save_path = os.path.join(self.save_dir, save_filename)
-        network.load_state_dict(torch.load(save_path))
+    def save(self, epoch):
+        filename = '%d_net_G.tar' % epoch
+        path = os.path.join(self.save_dir, filename)
+
+        torch.save({
+            'epoch': epoch,
+            'network_SD': self.netG.state_dict(),
+            'optimizer_SD': self.optimizer.state_dict(),
+            'loss': self.loss
+        }, path)
+
+
+    def load(self, epoch):
+        filename = '%s_net_G.tar' % epoch
+        path = os.path.join(self.save_dir, filename)
+
+        checkpoint = torch.load(path)
+        assert checkpoint['epoch'] == int(epoch)
+        self.netG.load_state_dict(checkpoint['network_SD'])
+
+        if self.isTrain:
+            self.optimizer.load_state_dict(checkpoint['optimizer_SD'])
+            self.loss = checkpoint['loss']
+
+            if self.scheduler is not None:
+                self.scheduler.load_state_dict(checkpoint['scheduler_SD'])
+
 
     # update learning rate (called once every epoch)
     def update_learning_rate(self, val_loss):

@@ -37,7 +37,7 @@ visualizer = Visualizer(opt)
 
 testepochs = []
 for pth in os.listdir(checkpoints_dir):
-    epoch = re.search('(.+?)_net_G.pth', pth)
+    epoch = re.search('(.+?)_net_G.tar', pth)
     if epoch is None:
         continue
     testepochs.append(epoch.group(1))
@@ -53,6 +53,7 @@ with Database(opt.db_dir) as db:
         try:
             print("epoch: %s" % testepoch)
             model.load(testepoch)
+            model.netG.eval()
             visualizer.change_log_path(testepoch)
             err = []
 

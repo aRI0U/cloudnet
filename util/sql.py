@@ -1,8 +1,7 @@
 import numpy as np
 import os
-import re
 import sqlite3
-import glob
+import warnings
 
 class Database():
     # init operations
@@ -120,10 +119,12 @@ class Database():
         query += ' AND '.join(keys)
         self._exec(query, tuple(vals))
         # print(query, vals)
-        id = self.c.fetchone()
-        if id is None:
+        id_list = self.c.fetchall()
+        if len(id_list) == 0:
             return None
-        return id[0]
+        if len(id_list) > 1:
+            warnings.warn("There are multiple experiments with such options. The most recent one has been loaded.")
+        return max(id_list)[0]
 
     def find_info(self, id, cols, get_col_names=False):
         # for row in self.c.execute("SELECT * FROM last_epochs"):
