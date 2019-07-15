@@ -6,6 +6,7 @@ import pickle
 import torch
 import torch.nn.functional as F
 
+from models.mdn import mdn_loss
 import util.util as util
 from util.geometry import GeometricLoss
 
@@ -48,7 +49,7 @@ class CloudNetModel():
         if self.isTrain:
             self.old_lr = opt.lr
             # define loss functions
-            self.criterion = lambda x,y: torch.mean(F.mse_loss(x, y, reduction='none'), dim=-1)
+            self.criterion = mdn_loss
 
             self.optimizer = torch.optim.Adam(self.netG.parameters(),
                                                 lr=opt.lr, eps=1,
@@ -83,16 +84,9 @@ class CloudNetModel():
         self.pred_Y = self.netG(self.input_X)
 
     def backward(self):
-        pred_pos, input_pos = self.pred_Y[...,:3], self.input_Y[:,:3].unsqueeze(1)
-        pred_ori, input_ori = self.pred_Y[...,3:self.opt.output_nc], self.input_Y[:,3:self.opt.output_nc].unsqueeze(1)
-        sigma = torch.exp(self.pred_Y[...,-2])
-        alpha = F.softmax(self.pred_Y[...,-1], dim=-1)
-        # print(-self.criterion(pred_pos, input_pos))
-        # print(alpha)
-        # print(sigma)
-        # print(torch.exp(-self.criterion(pred_pos, input_pos)/(2*sigma**2)))
-        self.loss_pos = -torch.sum(torch.log(torch.sum(alpha/(sigma**3) * torch.clamp(torch.exp(-self.criterion(pred_pos, input_pos)/(2*sigma**2)), min=1e-18), dim=-1)))
-        self.loss_ori = -torch.sum(torch.log(torch.sum(alpha * torch.exp(-self.criterion(pred_ori, input_ori)/(2*sigma**2)), dim=-1)))
+        pi, sigma, mu = self.pred_Y
+        self.loss_pos = self.criterion(pi, sigma[...,:3], mu[...,:3], self.input_Y[:,:3])
+        self.loss_ori = self.criterion(pi, sigma[...,3:], mu[...,3:], self.input_Y[:,3:])
         self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
 
         self.loss.backward()
@@ -107,6 +101,10 @@ class CloudNetModel():
     def test(self):
         self.forward()
 
+    def get_best_pose(self):
+        pi, sigma, mu = self.pred_Y
+        return mu[:,torch.max(pi, dim=1).indices].squeeze(1)
+
     # get image paths
     def get_image_paths(self):
         return self.image_paths
@@ -118,14 +116,17 @@ class CloudNetModel():
                                 ('geom_err', self.loss.item()),
                                 ])
 
-        pos_err = torch.dist(self.pred_Y[:,:3], self.input_Y[:,:3])
+        pred = self.get_best_pose()
+        pos_err = torch.dist(pred[:,:3], self.input_Y[:,:3])
         ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-        abs_distance = torch.abs((ori_gt.mul(self.pred_Y[:,3:self.opt.output_nc])).sum())
+        abs_distance = torch.abs((ori_gt.mul(pred[:,3:self.opt.output_nc])).sum())
         ori_err = 2*180/pi * torch.acos(abs_distance)
         return [pos_err.item(), ori_err.item()]
 
     def get_current_pose(self):
-        return self.pred_Y.data[0].cpu().numpy()
+        return self.get_best_pose().data[0].cpu().numpy()
+
+
 
     def get_current_visuals(self):
         input_X = util.tensor2im(self.input_X.data)

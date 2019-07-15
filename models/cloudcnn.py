@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import XConv, fps, knn
 
 from models.net import Net
+from models.mdn import MDN
 
 class XConvolution(nn.Module):
     r"""
@@ -60,13 +61,15 @@ class CloudCNN(Net):
         self.xconv2 = XConvolution(32, 64, 96, 128, ceil(n_points/4))
         self.xconv3 = XConvolution(128, 256, 384, 512, ceil(n_points/16))
 
-        self.conv = nn.Conv1d(ceil(n_points/64), 3, 1)
+        self.conv = nn.Conv1d(ceil(n_points/64), 1, 1)
 
-        self.fc = nn.Sequential(
-            nn.Linear(512, 64),
-            nn.ReLU(),
-            nn.Linear(64, output_nc+2)
-        )
+        # self.fc = nn.Sequential(
+        #     nn.Linear(512, 256),
+        #     nn.ReLU(),
+        #     nn.Linear(256, 128)
+        # )
+
+        self.mdn = MDN(512, output_nc, 2)
 
 
     def forward(self, input):
@@ -77,12 +80,13 @@ class CloudCNN(Net):
         x, p = self.xconv2(x, p, self._batch_indicator(B, ceil(N/4), self.use_gpu))
         x, p = self.xconv3(x, p, self._batch_indicator(B, ceil(N/16), self.use_gpu))
         # assign to channels
-        x = self.fc(x)
+        # x = self.fc(x)
         # merge into one output vector
-        x = self.conv(x).view(B, 3, self.output_nc+2)
+        x = self.conv(x).view(B, 512)
         # normalize quaterions
-        output = torch.cat((x[...,:3], F.normalize(x[...,3:self.output_nc], p=2, dim=-1), x[...,self.output_nc:]), dim=-1)
-        return output
+        pi, sigma, mu = self.mdn(x)
+        output = torch.cat((mu[...,:3], F.normalize(mu[...,3:self.output_nc], p=2, dim=-1)), dim=-1)
+        return pi, sigma, output
 
 
 if __name__ == '__main__':
