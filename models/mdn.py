@@ -35,18 +35,41 @@ class MDN(nn.Module):
         self.out_features = out_features
         self.num_gaussians = num_gaussians
         self.pi = nn.Sequential(
-            nn.Linear(in_features, num_gaussians),
+            nn.Linear(in_features, in_features//4),
+            nn.ReLU(),
+            nn.Linear(in_features//4, in_features//16),
+            nn.ReLU(),
+            nn.Linear(in_features//16, num_gaussians),
             nn.Softmax(dim=1)
         )
-        self.sigma = nn.Linear(in_features, out_features*num_gaussians)
-        self.mu = nn.Linear(in_features, out_features*num_gaussians)
+        self.sigma = nn.Sequential(
+            nn.Linear(in_features, in_features//2),
+            nn.ReLU(),
+            nn.Linear(in_features//2, in_features//4),
+            nn.ReLU(),
+            nn.Linear(in_features//4, out_features*num_gaussians),
+            nn.Softplus()
+        )
 
-    def forward(self, minibatch):
-        pi = self.pi(minibatch)
-        sigma = torch.exp(self.sigma(minibatch))
-        sigma = sigma.view(-1, self.num_gaussians, self.out_features)
-        mu = self.mu(minibatch)
-        mu = mu.view(-1, self.num_gaussians, self.out_features)
+        self.mu = nn.Sequential(
+            nn.Linear(in_features, in_features//2),
+            nn.ReLU(),
+            nn.Linear(in_features//2, in_features//4),
+            nn.ReLU(),
+            nn.Linear(in_features//4, out_features*num_gaussians)
+        )
+
+
+    def forward(self, input):
+        pi = self.pi(input)
+        sigma = self.sigma(input).view(-1, self.num_gaussians, self.out_features)
+        mu = self.mu(input).view(-1, self.num_gaussians, self.out_features)
+        if not (mu[0,0,0] >= 0 or mu[0,0,0] < 0):
+            print(minibatch)
+            print(pi)
+            print(sigma)
+            print(mu)
+            raise ValueError("NAN")
         return pi, sigma, mu
 
 
@@ -87,12 +110,22 @@ def mdn_loss(pi, sigma, mu, target):
     """
     target = target.unsqueeze(1).expand_as(sigma)
     norms = ((mu-target)/sigma)**2
+    # print(norms)
     norms = 0.5*torch.sum(norms, dim=2)
-    values, _ = torch.max(norms, dim=1)
-    norms = norms - values.unsqueeze(1)
+    values = torch.min(norms, dim=1).values
+    exp = torch.exp(values.unsqueeze(1) - norms)
     weights = pi / torch.prod(sigma, dim=2)
-    likelihood = torch.sum(weights*torch.exp(norms), dim=1)
+    likelihood = torch.sum(weights*exp, dim=1)
     ll = torch.log(likelihood) - values
+    # print('mdn')
+    # print(mu[0])
+    # print(norms[0])
+    # print(weights[0])
+    # print(weights*exp[0])
+    # print(-torch.mean(ll))
+    m = torch.mean(ll)
+    if not (m >= 0 or m < 0):
+        raise ValueError("NAN")
     return -torch.mean(ll)
 
 
@@ -108,3 +141,21 @@ def sample(pi, sigma, mu):
     for i, idx in enumerate(pis):
         sample[i] = sample[i].mul(sigma[i,idx]).add(mu[i,idx])
     return sample
+
+if __name__ == '__main__':
+    import torch.nn.functional as F
+
+    B, G, n = (8,5,3)
+    pi = torch.randn(B, G)
+    pi = F.softmax(pi, dim=1)
+    sigma = torch.randn(B, G, n)
+    sigma = torch.exp(sigma)*4
+    mu = torch.randn(B, G, n)
+    target = torch.randn(B, n)
+    t = target.unsqueeze(1).expand_as(mu)
+    lazy_loss = -torch.mean(torch.log(torch.sum(pi / torch.prod(sigma, dim=2) * torch.exp(-0.5*torch.sum(((mu-t)/sigma)**2, dim=2)), dim=1)))
+    loss = mdn_loss(pi, sigma, mu, target)
+    # print(((mu-t)/sigma)**2)
+    print(torch.log(torch.sum(pi / torch.prod(sigma, dim=2) * torch.exp(-0.5*torch.sum(((mu-t)/sigma)**2, dim=2)), dim=1)))
+    # print(torch.log(pi / torch.prod(sigma, dim=2) * torch.exp(-0.5*torch.sum(((mu-t)/sigma)**2, dim=2))))
+    assert torch.eq(loss, lazy_loss), '%s\n%s' % (str(loss), str(lazy_loss))

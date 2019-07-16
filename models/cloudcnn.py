@@ -34,18 +34,26 @@ class XConvolution(nn.Module):
         col = N*torch.arange(B).unsqueeze(1)
         return (row + col).view(-1).cuda()
 
+    @staticmethod
+    def debug_nan(x, *args):
+        if not (x >= 0 or x <= 0):
+            for arg in args:
+                print(arg)
+            raise ValueError("NAN")
+
 
     def forward(self, x, p, batch):
+        # print('xconv')
         B, N, d = x.shape
         pos = p.view(B*N, -1)
         features = x.view(B*N, -1)
-
+        self.debug_nan(features[0,0], features)
         idx = fps(pos, batch, ratio=0.25, random_start=True)
-
+        self.debug_nan(idx[0], idx)
         knn_idx = knn(pos, pos[idx], 4, batch_x=batch, batch_y=batch[idx])[1]
-
+        self.debug_nan(knn_idx[0])
         x = self.xconv(features, pos, batch=batch)
-
+        self.debug_nan(x[0,0], x, knn_idx, features, pos)
         x = x[knn_idx].view(B, ceil(N/4), 4, self.C_mid1)
         x = self.fc(x)
         x = self.conv(x).view(B, ceil(N/4), self.C_out)
@@ -55,7 +63,7 @@ class CloudCNN(Net):
     r"""
         CloudCNN: neural network inspired from PointCNN used for relocalization.
     """
-    def __init__(self, input_nc, output_nc, n_points, use_gpu):
+    def __init__(self, input_nc, output_nc, n_points, num_gaussians, use_gpu):
         super(CloudCNN, self).__init__(input_nc, output_nc, n_points, use_gpu)
         self.xconv1 = XConvolution(input_nc, 16, 24, 32, n_points)
         self.xconv2 = XConvolution(32, 64, 96, 128, ceil(n_points/4))
@@ -69,22 +77,31 @@ class CloudCNN(Net):
         #     nn.Linear(256, 128)
         # )
 
-        self.mdn = MDN(512, output_nc, 2)
+        self.mdn = MDN(512, output_nc, num_gaussians)
+
+    @staticmethod
+    def debug_nan(x, *args):
+        if not (x >= 0 or x <= 0):
+            for arg in args:
+                print(arg)
+            raise ValueError("NAN")
 
 
     def forward(self, input):
         B, N, d = input.shape
         pos, features = self._split_point_cloud(input)
         # hierarchical X-convolutions
+        self.debug_nan(features[0,0,0])
         x, p = self.xconv1(features, pos, self._batch_indicator(B, N, self.use_gpu))
+        self.debug_nan(x[0,0,0], x, features)
         x, p = self.xconv2(x, p, self._batch_indicator(B, ceil(N/4), self.use_gpu))
+        self.debug_nan(x[0,0,0])
         x, p = self.xconv3(x, p, self._batch_indicator(B, ceil(N/16), self.use_gpu))
-        # assign to channels
-        # x = self.fc(x)
-        # merge into one output vector
+        self.debug_nan(x[0,0,0])
         x = self.conv(x).view(B, 512)
-        # normalize quaterions
+        self.debug_nan(x[0,0])
         pi, sigma, mu = self.mdn(x)
+        # normalize quaterions
         output = torch.cat((mu[...,:3], F.normalize(mu[...,3:self.output_nc], p=2, dim=-1)), dim=-1)
         return pi, sigma, output
 

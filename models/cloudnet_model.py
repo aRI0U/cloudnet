@@ -38,7 +38,7 @@ class CloudNetModel():
             self.netG = CloudNet(opt.input_nc, opt.output_nc, opt.n_points)
         elif opt.model == 'cloudcnn':
             from models.cloudcnn import CloudCNN
-            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points, use_gpu=use_gpu)
+            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points, 2, use_gpu=use_gpu)
         else:
             raise ValueError('Model [%s] does not exist' % model)
 
@@ -87,8 +87,8 @@ class CloudNetModel():
         pi, sigma, mu = self.pred_Y
         self.loss_pos = self.criterion(pi, sigma[...,:3], mu[...,:3], self.input_Y[:,:3])
         self.loss_ori = self.criterion(pi, sigma[...,3:], mu[...,3:], self.input_Y[:,3:])
-        self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori
-
+        self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori + 1*torch.mean(sigma)
+        print('%.3f\t%.3f' % (torch.mean(sigma[...,:3]).item(), torch.mean(sigma[...,3:]).item()))
         self.loss.backward()
 
     def optimize_parameters(self):
