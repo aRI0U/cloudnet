@@ -96,17 +96,27 @@ def gaussian_probability(sigma, mu, target):
 
 
 def mdn_loss(pi, sigma, mu, target):
-    """
+    # type: (torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor) -> torch.FloatTensor
+    r"""
         Calculates the error, given the MoG parameters and the target
         The loss is the negative log likelihood of the data given the MoG
         parameters.
 
         Parameters
         ----------
-        pi (B, G)
-        sigma (B, G, n)
-        mu (B, G, n)
-        target (B, n)
+        pi: torch.FloatTensor
+            (B, G) tensor containing the weights of the kernels
+        sigma: torch.FloatTensor
+            (B, G, n) tensor containing the standard deviation of ...
+        mu: torch.FloatTensor
+            (B, G, n) tensor containing the predicted values
+        target: torch.FloatTensor
+            (B, n) tensor containing the target
+
+        Returns
+        -------
+        torch.FloatTensor
+            the negative log-likelihood of the distribution
     """
     target = target.unsqueeze(1).expand_as(sigma)
     norms = ((mu-target)/sigma)**2

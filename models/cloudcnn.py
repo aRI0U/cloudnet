@@ -91,15 +91,12 @@ class CloudCNN(Net):
         B, N, d = input.shape
         pos, features = self._split_point_cloud(input)
         # hierarchical X-convolutions
-        self.debug_nan(features[0,0,0])
         x, p = self.xconv1(features, pos, self._batch_indicator(B, N, self.use_gpu))
-        self.debug_nan(x[0,0,0], x, features)
         x, p = self.xconv2(x, p, self._batch_indicator(B, ceil(N/4), self.use_gpu))
-        self.debug_nan(x[0,0,0])
         x, p = self.xconv3(x, p, self._batch_indicator(B, ceil(N/16), self.use_gpu))
-        self.debug_nan(x[0,0,0])
+
         x = self.conv(x).view(B, 512)
-        self.debug_nan(x[0,0])
+
         pi, sigma, mu = self.mdn(x)
         # normalize quaterions
         output = torch.cat((mu[...,:3], F.normalize(mu[...,3:self.output_nc], p=2, dim=-1)), dim=-1)
