@@ -34,38 +34,44 @@ class MDN(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.num_gaussians = num_gaussians
-        self.pi = nn.Sequential(
+        self.hidden = nn.Sequential(
             nn.Linear(in_features, in_features//4),
-            nn.ReLU(),
-            nn.Linear(in_features//4, in_features//16),
-            nn.ReLU(),
-            nn.Linear(in_features//16, num_gaussians),
+            nn.Tanh()
+        )
+        self.pi = nn.Sequential(
+            # nn.Linear(in_features, in_features//4),
+            # nn.ReLU(),
+            # nn.Linear(in_features//4, in_features//16),
+            # nn.ReLU(),
+            nn.Linear(in_features//4, num_gaussians),
             nn.Softmax(dim=1)
         )
         self.sigma = nn.Sequential(
-            nn.Linear(in_features, in_features//2),
-            nn.ReLU(),
-            nn.Linear(in_features//2, in_features//4),
-            nn.ReLU(),
+            # nn.Linear(in_features, in_features//2),
+            # nn.ReLU(),
+            # nn.Linear(in_features//2, in_features//4),
+            # nn.ReLU(),
             nn.Linear(in_features//4, out_features*num_gaussians),
             nn.Softplus()
+            # nn.Sigmoid()
         )
 
         self.mu = nn.Sequential(
-            nn.Linear(in_features, in_features//2),
-            nn.ReLU(),
-            nn.Linear(in_features//2, in_features//4),
-            nn.ReLU(),
+            # nn.Linear(in_features, in_features//2),
+            # nn.ReLU(),
+            # nn.Linear(in_features//2, in_features//4),
+            # nn.ReLU(),
             nn.Linear(in_features//4, out_features*num_gaussians)
         )
 
 
     def forward(self, input):
-        pi = self.pi(input)
-        sigma = self.sigma(input).view(-1, self.num_gaussians, self.out_features)
-        mu = self.mu(input).view(-1, self.num_gaussians, self.out_features)
+        hidden = self.hidden(input)
+        pi = self.pi(hidden)
+        sigma = self.sigma(hidden).view(-1, self.num_gaussians, self.out_features)
+        mu = self.mu(hidden).view(-1, self.num_gaussians, self.out_features)
         if not (mu[0,0,0] >= 0 or mu[0,0,0] < 0):
-            print(minibatch)
+            print(input)
             print(pi)
             print(sigma)
             print(mu)
@@ -131,12 +137,12 @@ def mdn_loss(pi, sigma, mu, target):
     # print(mu[0])
     # print(norms[0])
     # print(weights[0])
-    # print(weights*exp[0])
+    # print((weights*exp)[0])
     # print(-torch.mean(ll))
     m = torch.mean(ll)
     if not (m >= 0 or m < 0):
         raise ValueError("NAN")
-    return -torch.mean(ll)
+    return -m#torch.mean(ll)
 
 
 

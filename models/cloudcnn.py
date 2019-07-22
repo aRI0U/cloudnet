@@ -71,12 +71,6 @@ class CloudCNN(Net):
 
         self.conv = nn.Conv1d(ceil(n_points/64), 1, 1)
 
-        # self.fc = nn.Sequential(
-        #     nn.Linear(512, 256),
-        #     nn.ReLU(),
-        #     nn.Linear(256, 128)
-        # )
-
         self.mdn = MDN(512, output_nc, num_gaussians)
 
     @staticmethod
