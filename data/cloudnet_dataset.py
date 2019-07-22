@@ -1,10 +1,12 @@
 import csv
 from numpy import load
 import os
+from PIL import Image
 
 import torch
 from torch.utils.data import Dataset
 
+from data.base_dataset import get_posenet_transform
 from util.geometry import euler_to_quaternion
 
 class CloudNetDataset(Dataset):
@@ -13,10 +15,13 @@ class CloudNetDataset(Dataset):
         self.root = opt.dataroot
         driving_data = os.path.join(self.root, 'driving_data.csv')
         # select the folder corresponding to the right input type
-        file_path = os.path.join('PointCloudLocal1', 'point_cloud_%s.npy')
-        self.mean_image = None #np.load(os.path.join(self.root , 'mean_image.npy'))
-        self.A_paths = []
+        img_path = os.path.join('CameraRGB1', 'image_%s.png')
+        pc_path = os.path.join('PointCloudLocal1', 'point_cloud_%s.npy')
+        self.mean_image = load(os.path.join(self.root , 'mean_image.npy'))
+        self.img_paths = []
+        self.pc_paths = []
         self.A_poses = []
+        self.transform = get_posenet_transform(opt, self.mean_image)
 
         # extract driving data
         print('Extracting data from %s...' % driving_data, end='\t')
@@ -29,26 +34,30 @@ class CloudNetDataset(Dataset):
                         continue
                     if opt.phase == 'val' and int(img_number) % opt.split != 0:
                         continue
-                path = os.path.join(self.root, file_path % img_number)
+                i_path = os.path.join(self.root, img_path % img_number)
+                p_path = os.path.join(self.root, pc_path % img_number)
                 # ignore the line if the point cloud doesn't exist
-                if not os.path.isfile(path):
+                if not (os.path.isfile(i_path) and os.path.isfile(p_path)):
                     continue
-                self.A_paths.append(path)
+                self.img_paths.append(i_path)
+                self.pc_paths.append(p_path)
                 pose = torch.tensor((float(row['pos_x']), float(row['pos_y']), float(row['pos_z'])))
                 # for now only 1 dof of rotation is enabled
                 pose = torch.cat((pose, euler_to_quaternion(0, 0, float(row['steer'])/2)))
                 self.A_poses.append(pose)
         print('Done')
-        self.A_size = len(self.A_paths)
+        self.A_size = len(self.img_paths)
 
     def __getitem__(self, index):
         index_A = index % self.A_size
-        A_path = self.A_paths[index % self.A_size]
-        A_pose = self.A_poses[index % self.A_size]
+        img_path = self.img_paths[index_A]
+        pc_path = self.pc_paths[index_A]
+        A_pose = self.A_poses[index_A]
+        A_img = Image.open(img_path).convert('RGB')
+        A_img = self.transform(A_img)
+        A_pc = self._extract_file(pc_path)
 
-        A = self._extract_file(A_path)
-
-        return {'X': A, 'Y': A_pose, 'X_paths': A_path}
+        return {'X_img': A_img, 'X_pc': A_pc, 'Y': A_pose, 'X_path_img': img_path, 'X_path_pc': pc_path}
 
     def __len__(self):
         return self.A_size

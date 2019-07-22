@@ -56,9 +56,9 @@ class CloudCNN(Net):
     """
     def __init__(self, input_nc, output_nc, n_points, use_gpu):
         super(CloudCNN, self).__init__(input_nc, output_nc, n_points, use_gpu)
-        self.xconv1 = XConvolution(input_nc, 16, 24, 32, n_points)
-        self.xconv2 = XConvolution(32, 64, 96, 128, ceil(n_points/4))
-        self.xconv3 = XConvolution(128, 256, 384, 512, ceil(n_points/16))
+        self.xconv1 = XConvolution(input_nc, 16, 32, 64, n_points)
+        self.xconv2 = XConvolution(64, 128, 192, 256, ceil(n_points/4))
+        self.xconv3 = XConvolution(256, 512, 768, 1024, ceil(n_points/16))
 
         self.conv = nn.Conv1d(ceil(n_points/64), 1, 1)
 

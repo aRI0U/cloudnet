@@ -37,7 +37,7 @@ class BaseOptions():
         self.base.add_argument('--lr_decay_iters', type=int, default=20, help='multiply by a gamma every lr_decay_iters iterations')
         self.base.add_argument('--lstm_hidden_size', type=int, default=256, help='hidden size of the LSTM layer in PoseLSTM')
         self.base.add_argument('--max_dataset_size', type=int, default=float("inf"), help='Maximum number of samples allowed per dataset. If the dataset directory contains more than max_dataset_size, only a subset is loaded.')
-        self.base.add_argument('--model', type=str, choices=['posenet','poselstm','cloudnet','cloudnetvlad'], default='cloudcnn', help='model to use')
+        self.base.add_argument('--model', type=str, choices=['cloudcnn','posepoint','cloudnet','cloudnetvlad'], default='posepoint', help='model to use')
         self.param.add_argument('--name', type=str, default=None, help='name of the experiment. It decides where to store samples and models')
         self.base.add_argument('--no_dropout', action='store_true', help='no dropout for the generator')
         self.base.add_argument('--no_flip', action='store_true', default=True, help='if specified, do not flip the images for data augmentation')
