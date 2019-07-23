@@ -37,7 +37,8 @@ class Net(nn.Module):
         return (z + torch.arange(batch_size).unsqueeze(1)).view(-1)
 
 
-    def _split_point_cloud(self, pc):
+    @staticmethod
+    def _split_point_cloud(pc):
         # type: torch.cuda.FloatTensor -> (torch.cuda.FloatTensor, torch.cuda.FloatTensor)
         r"""
             Split point cloud in features and pos
@@ -54,7 +55,7 @@ class Net(nn.Module):
             torch.cuda.FloatTensor
                 (...,d) tensor containing the whole point cloud
         """
-        return pc[...,:3].contiguous(), pc[...,:self.input_nc]
+        return pc[...,:3].contiguous(), pc
 
     def forward(self, input):
         # type: (Net, torch.cuda.FloatTensor) -> torch.cuda.FloatTensor
