@@ -38,7 +38,7 @@ class CloudNetModel():
             self.netG = CloudNet(opt.input_nc, opt.output_nc, opt.n_points)
         elif opt.model == 'cloudcnn':
             from models.cloudcnn import CloudCNN
-            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points, 3, use_gpu=use_gpu)
+            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points, 1, use_gpu=use_gpu)
         else:
             raise ValueError('Model [%s] does not exist' % model)
 
@@ -118,7 +118,7 @@ class CloudNetModel():
                                 ('geom_err', self.loss.item()),
                                 ])
 
-        pred = self.get_best_pose()
+                
         pos_err = torch.dist(pred[:,:3], self.input_Y[:,:3])
         ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
         abs_distance = torch.abs((ori_gt.mul(pred[:,3:self.opt.output_nc])).sum())
