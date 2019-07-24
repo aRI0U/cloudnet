@@ -16,7 +16,7 @@ class XConvolution(nn.Module):
         super(XConvolution, self).__init__()
         self.C_mid1 = C_mid1
         self.C_out = C_out
-        self.xconv = XConv(C_in, C_mid1, 3, 4, hidden_channels=max(C_in//4, 2))
+        self.xconv = XConv(C_in, C_mid1, 3, 4, hidden_channels=max(C_in//4, 1))
 
         self.conv = nn.Conv2d(ceil(n_points/4), ceil(n_points/4), (4,1))
 
