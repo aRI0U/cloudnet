@@ -11,8 +11,6 @@ from util.sql import Database
 from util.visualizer import Visualizer
 from util import my_html
 
-sql.connect('./checkpoints')
-
 opt = TestOptions().parse()
 opt.nThreads = 1   # test code only supports nThreads = 1
 opt.batchSize = 1  # test code only supports batchSize = 1
@@ -35,31 +33,26 @@ testfile.write('==================\n')
 model = create_model(opt)
 visualizer = Visualizer(opt)
 
-testepochs = []
-for pth in os.listdir(checkpoints_dir):
-    epoch = re.search('(.+?)_net_G.tar', pth)
-    if epoch is None:
-        continue
-    testepochs.append(epoch.group(1))
-
 with Database(opt.db_dir) as db:
-    for testepoch in sorted(testepochs, key = lambda s: '%6s' % s):
-        test_pkey = (opt.ID, int(testepoch), opt.phase)
+    for epoch in range(db.get_last_epoch(opt.ID)+1):
+        if not os.path.isfile(os.path.join(checkpoints_dir, '%d_net_G.tar' % epoch)):
+            continue
+        test_pkey = (opt.ID, epoch, opt.phase)
         if db.is_test(*test_pkey):
             continue
         db.new_test(*test_pkey)
         db.commit()
 
         try:
-            print("epoch: %s" % testepoch)
-            model.load(testepoch)
+            print("epoch: %d" % epoch)
+            model.load(epoch)
             model.netG.eval()
-            visualizer.change_log_path(testepoch)
+            visualizer.change_log_path(epoch)
             err = []
 
             for i, data in enumerate(dataset):
                 model.set_input(data)
-                model.test()
+                model.test(epoch)
                 img_path = model.get_image_paths()[0]
                 print('\t%04d/%04d: process image... %s' % (i, len(dataset), img_path), end='\r')
                 image_path = img_path.split('/')[-2] + '/' + img_path.split('/')[-1]
@@ -73,24 +66,22 @@ with Database(opt.db_dir) as db:
             median_pos = np.median(err, axis=0)
 
             if median_pos[0] < besterror[1]:
-                besterror = [testepoch, median_pos[0], median_pos[1]]
+                besterror = [epoch, median_pos[0], median_pos[1]]
             print()
             # print("median position: {0:.2f}".format(np.median(err_pos)))
             # print("median orientat: {0:.2f}".format(np.median(err_ori)))
             print("\tmedian wrt pos.: {0:.2f}m {1:.2f}°".format(median_pos[0], median_pos[1]))
-            testfile.write("{0:<5} {1:.2f}m {2:.2f}°\n".format(testepoch,
+            testfile.write("{0:<5} {1:.2f}m {2:.2f}°\n".format(epoch,
                                                              median_pos[0],
                                                              median_pos[1]))
             testfile.flush()
 
-            os.rename(visualizer.log_name, os.path.join(results_dir, '%s_%s.txt' % (opt.phase, testepoch)))
+            os.rename(visualizer.log_name, os.path.join(results_dir, '%s_%d.txt' % (opt.phase, epoch)))
             db.add_test_result(*test_pkey, *median_pos)
 
         finally:
             db.remove_tmp_test(*test_pkey)
             db.commit()
-            if os.path.isfile(visualizer.log_name):
-                os.remove(visualizer.log_name)
 
 try:
     os.rmdir(os.path.join(results_dir, 'tmp'))
@@ -102,5 +93,3 @@ testfile.write('-----------------\n')
 testfile.write("{0:<5} {1:.2f}m {2:.2f}°\n".format(*besterror))
 testfile.write('==================\n')
 testfile.close()
-
-sql.close()

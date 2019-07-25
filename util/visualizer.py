@@ -154,7 +154,7 @@ class Visualizer():
         self.log_name = os.path.join(self.opt.results_dir,
                                      self.opt.name,
                                      'tmp',
-                                     '%s_%s.txt' % (self.opt.phase, which_epoch))
+                                     '%s_%d.txt' % (self.opt.phase, which_epoch))
 
     def save_estimated_pose(self, image_path, pose):
         with open(self.log_name, "a") as log_file:
