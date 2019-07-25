@@ -21,7 +21,7 @@ class CloudNetDataset(Dataset):
         poses = np.loadtxt(driving_data, dtype=float, usecols=(1,2,3,4,5,6,7), delimiter=';', skiprows=1)
 
         # splitting between training and test sets
-        sep = np.ones(len(frames), dtype=bool)
+        set = np.ones(len(frames), dtype=bool)
         if opt.split > 0:
             if opt.isTrain or opt.phase == 'retrain':
                 set = frames % opt.split != 0
