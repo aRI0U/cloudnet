@@ -34,7 +34,12 @@ model = create_model(opt)
 visualizer = Visualizer(opt)
 
 with Database(opt.db_dir) as db:
-    for epoch in range(db.get_last_epoch(opt.ID)+1):
+    epoch = 0
+    last_epoch = db.get_last_epoch(opt.ID)
+    while epoch < last_epoch or epoch < db.get_last_epoch(opt.ID):
+        if epoch >= last_epoch:
+            last_epoch = db.get_last_epoch(opt.ID)
+        epoch += 1
         if not os.path.isfile(os.path.join(checkpoints_dir, '%d_net_G.tar' % epoch)):
             continue
         test_pkey = (opt.ID, epoch, opt.phase)
