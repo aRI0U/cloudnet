@@ -73,6 +73,12 @@ class CloudCNN(Net):
 
         self.mdn = MDN(512, output_nc, num_gaussians)
 
+        self.fc = nn.Sequential(
+            nn.Linear(512, 128),
+            nn.Tanh(),
+            nn.Linear(128, output_nc)
+        )
+
     @staticmethod
     def debug_nan(x, *args):
         if not (x >= 0 or x <= 0):
@@ -81,7 +87,7 @@ class CloudCNN(Net):
             raise ValueError("NAN")
 
 
-    def forward(self, input):
+    def forward(self, input, epoch):
         B, N, d = input.shape
         pos, features = self._split_point_cloud(input)
         # hierarchical X-convolutions
@@ -91,10 +97,14 @@ class CloudCNN(Net):
 
         x = self.conv(x).view(B, 512)
 
-        pi, sigma, mu = self.mdn(x)
+        if epoch >= 100:
+            pi, sigma, mu = self.mdn(x)
+        else:
+            pi, sigma, mu = None, None, self.fc(x).unsqueeze(0)
         # normalize quaterions
         output = torch.cat((mu[...,:3], F.normalize(mu[...,3:self.output_nc], p=2, dim=-1)), dim=-1)
         return pi, sigma, output
+
 
 
 if __name__ == '__main__':

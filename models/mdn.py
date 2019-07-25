@@ -39,28 +39,16 @@ class MDN(nn.Module):
             nn.Tanh()
         )
         self.pi = nn.Sequential(
-            # nn.Linear(in_features, in_features//4),
-            # nn.ReLU(),
-            # nn.Linear(in_features//4, in_features//16),
-            # nn.ReLU(),
             nn.Linear(in_features//4, num_gaussians),
             nn.Softmax(dim=1)
         )
         self.sigma = nn.Sequential(
-            # nn.Linear(in_features, in_features//2),
-            # nn.ReLU(),
-            # nn.Linear(in_features//2, in_features//4),
-            # nn.ReLU(),
             nn.Linear(in_features//4, out_features*num_gaussians),
             nn.Softplus()
             # nn.Sigmoid()
         )
 
         self.mu = nn.Sequential(
-            # nn.Linear(in_features, in_features//2),
-            # nn.ReLU(),
-            # nn.Linear(in_features//2, in_features//4),
-            # nn.ReLU(),
             nn.Linear(in_features//4, out_features*num_gaussians)
         )
 

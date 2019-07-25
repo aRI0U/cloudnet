@@ -49,7 +49,7 @@ class CloudNetModel():
         if self.isTrain:
             self.old_lr = opt.lr
             # define loss functions
-            self.criterion = mdn_loss
+            self.criterions = [torch.nn.MSELoss(), mdn_loss]
 
             self.optimizer = torch.optim.Adam(self.netG.parameters(),
                                                 lr=opt.lr, eps=1,
@@ -76,36 +76,42 @@ class CloudNetModel():
     def set_input(self, batch):
         input_X = batch['X']
         input_Y = batch['Y']
-        self.image_paths = batch['X_paths']
+        self.image_paths = batch['X_path']
         self.input_X.resize_(input_X.size()).copy_(input_X)
         self.input_Y.resize_(input_Y.size()).copy_(input_Y)
 
-    def forward(self):
-        self.pred_Y = self.netG(self.input_X)
+    def forward(self, epoch):
+        self.pred_Y = self.netG(self.input_X, epoch)
 
-    def backward(self):
+    def backward(self, epoch):
         pi, sigma, mu = self.pred_Y
-        self.loss_pos = self.criterion(pi, sigma[...,:3], mu[...,:3], self.input_Y[:,:3])
-        self.loss_ori = self.criterion(pi, sigma[...,3:], mu[...,3:], self.input_Y[:,3:])
-        self.regularizer = 0.1*torch.mean(sigma[...,:3])
-        self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori + self.regularizer
-        # pose = self.get_best_pose()
-        print('%.3f\t%.3f\t%.3f\t%.3f' % (torch.min(sigma[...,:3]).item(), torch.max(sigma[...,:3]).item(), torch.mean(sigma[...,:3]).item(), torch.median(sigma[...,:3]).item()))
+        if epoch < 100:
+            criterion = self.criterions[0]
+            self.loss_pos = criterion(mu[...,:3].squeeze(0), self.input_Y[:,:3])
+            self.loss_ori = criterion(mu[...,3:].squeeze(0), self.input_Y[:,3:])
+        else:
+            criterion = self.criterions[1]
+            self.loss_pos = criterion(pi, sigma[...,:3], mu[...,:3], self.input_Y[:,:3])
+            self.loss_ori = criterion(pi, sigma[...,3:], mu[...,3:], self.input_Y[:,3:])
+            # self.regularizer = 0.1*torch.mean(sigma[...,:3])
+            # pose = self.get_best_pose()
+            print('%.3f\t%.3f\t%.3f\t%.3f' % (torch.min(sigma[...,:3]).item(), torch.max(sigma[...,:3]).item(), torch.mean(sigma[...,:3]).item(), torch.median(sigma[...,:3]).item()))
+        self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori# + self.regularizer
         self.loss.backward()
 
-    def optimize_parameters(self):
+    def optimize_parameters(self, epoch):
         self.optimizer.zero_grad()
-        self.forward()
-        self.backward()
+        self.forward(epoch)
+        self.backward(epoch)
         self.optimizer.step()
 
     # no backprop gradients
-    def test(self):
-        self.forward()
+    def test(self, epoch):
+        self.forward(epoch)
 
     def get_best_pose(self):
         pi, sigma, mu = self.pred_Y
-        return mu[:,torch.max(pi, dim=1).indices].squeeze(1)
+        return mu[:,torch.max(pi, dim=1).indices].squeeze(1) if pi is not None else mu.squeeze(1)
 
     # get image paths
     def get_image_paths(self):
@@ -155,7 +161,7 @@ class CloudNetModel():
 
 
     def load(self, epoch):
-        filename = '%s_net_G.tar' % epoch
+        filename = '%d_net_G.tar' % epoch
         path = os.path.join(self.save_dir, filename)
 
         checkpoint = torch.load(path)
