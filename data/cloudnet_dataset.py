@@ -1,4 +1,4 @@
-from numpy import load, loadtxt
+import numpy as np
 import os
 from PIL import Image
 
@@ -16,20 +16,18 @@ class CloudNetDataset(Dataset):
         # select the folder corresponding to the right input type
         img_path = os.path.join(self.root, 'CameraRGB1', 'image_%05d.png')
         pc_path = os.path.join(self.root, 'PointCloudLocal1', 'point_cloud_%05d.npy')
-        self.mean_image = load(os.path.join(self.root , 'mean_image.npy'))
-        frames = loadtxt(driving_data, dtype=int, usecols=0, delimiter=';', skiprows=1)
-        poses = loadtxt(driving_data, dtype=float, usecols=(1,2,3,4,5,6,7), delimiter=';', skiprows=1)
+        self.mean_image = np.load(os.path.join(self.root , 'mean_image.npy'))
+        frames = np.loadtxt(driving_data, dtype=int, usecols=0, delimiter=';', skiprows=1)
+        poses = np.loadtxt(driving_data, dtype=float, usecols=(1,2,3,4,5,6,7), delimiter=';', skiprows=1)
 
         # splitting between training and test sets
+        sep = np.ones(len(frames), dtype=bool)
         if opt.split > 0:
             if opt.isTrain or opt.phase == 'retrain':
                 set = frames % opt.split != 0
 
             elif opt.phase == 'val':
                 set = frames % opt.split == 0
-
-            else:
-                set = np.ones(len(frames), dtype=bool)
 
         frames = frames[set]
         self.img_paths = [img_path % f for f in frames]
@@ -78,8 +76,8 @@ class CloudNetDataset(Dataset):
     @staticmethod
     def _sample(path, input_nc, n_points, sampling):
         if sampling == 'fps':
-            return load(path, mmap_mode='r')[:n_points, :input_nc]
+            return np.load(path, mmap_mode='r')[:n_points, :input_nc]
         if sampling == 'uni':
-            data = load(path, mmap_mode='r')
+            data = np.load(path, mmap_mode='r')
             return data[::(len(data))//n_points][:n_points, :input_nc]
         raise ValueError('Sampling [%s] does not exist' % sampling)
