@@ -14,39 +14,44 @@ start = time.time()
 with Database(DB_DIR) as db:
     # delete empty directories
     request = "SELECT name FROM options JOIN last_epochs ON options.id = last_epochs.id AND epoch = 0"
-    print(request)
-    print('Deleting empty directories...')
+    print('Following directories will be completely deleted:')
     for row, in db.c.execute(request):
-        name = row
-        print(' > Deleting %s' % name)
-        try:
-            rmtree(os.path.join(CHECKPOINT_DIR, name))
-        except FileNotFoundError:
-            pass
-    db._exec("""
-        DELETE FROM options
-        WHERE id IN (
-            SELECT id FROM last_epochs
-            WHERE epoch = 0
-        )
-    """)
-    db._exec("DELETE FROM last_epochs WHERE epoch = 0")
-    db.commit()
-    raise IndexError
-    i = 0
-    print('Deleting temporary models...', end='\r')
-    for name, epoch in c.execute("""
-        SELECT test.name, epoch FROM test
-        JOIN options ON test.name = options.name
-        WHERE epoch < last_epoch AND epoch % 50 != 0
-    """):
-        path = os.path.join(CHECKPOINT_DIR, name, '%s_net_G.pth' % epoch)
-        if os.path.isfile(path):
-            print('Deleting temporary models... (%d successfully deleted)' % i, end='\r')
-            i += 1
-            os.remove(path)
-    print('%d temporary files deleted.                            ' % i)
-    db.commit()
+        print(row)
+    if input('Continue? [y/n]').lower() in 'yes':
+        print('Deleting empty directories...')
+        for row, in db.c.execute(request):
+            name = row
+            print(' > Deleting %s' % name)
+            try:
+                rmtree(os.path.join(CHECKPOINT_DIR, name))
+            except FileNotFoundError:
+                pass
+        db._exec("""
+            DELETE FROM options
+            WHERE id IN (
+                SELECT id FROM last_epochs
+                WHERE epoch = 0
+            )
+        """)
+        db._exec("DELETE FROM last_epochs WHERE epoch = 0")
+        db.commit()
+        raise IndexError
+        i = 0
+        print('Deleting temporary models...', end='\r')
+        for name, epoch in c.execute("""
+            SELECT test.name, epoch FROM test
+            JOIN options ON test.name = options.name
+            WHERE epoch < last_epoch AND epoch % 50 != 0
+        """):
+            path = os.path.join(CHECKPOINT_DIR, name, '%s_net_G.pth' % epoch)
+            if os.path.isfile(path):
+                print('Deleting temporary models... (%d successfully deleted)' % i, end='\r')
+                i += 1
+                os.remove(path)
+        print('%d temporary files deleted.                            ' % i)
+        db.commit()
+    else:
+        print('Aborted')
 
 end = time.time()
 print('Cleaning completed. Time elapsed: %.3fs' % (end-start))

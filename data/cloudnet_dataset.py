@@ -1,5 +1,4 @@
-import csv
-from numpy import load
+from numpy import load, loadtxt
 import os
 from PIL import Image
 
@@ -13,39 +12,32 @@ class CloudNetDataset(Dataset):
     def initialize(self, opt):
         self.opt = opt
         self.root = opt.dataroot
-        driving_data = os.path.join(self.root, 'driving_data.csv')
+        driving_data = os.path.join(self.root, 'poses.txt')
         # select the folder corresponding to the right input type
-        img_path = os.path.join('CameraRGB1', 'image_%s.png')
-        pc_path = os.path.join('PointCloudLocal1', 'point_cloud_%s.npy')
+        img_path = os.path.join(self.root, 'CameraRGB1', 'image_%05d.png')
+        pc_path = os.path.join(self.root, 'PointCloudLocal1', 'point_cloud_%05d.npy')
         self.mean_image = load(os.path.join(self.root , 'mean_image.npy'))
-        self.img_paths = []
-        self.pc_paths = []
-        self.A_poses = []
+        frames = loadtxt(driving_data, dtype=int, usecols=0, delimiter=';', skiprows=1)
+        poses = loadtxt(driving_data, dtype=float, usecols=(1,2,3,4,5,6,7), delimiter=';', skiprows=1)
+
+        # splitting between training and test sets
+        if opt.split > 0:
+            if opt.isTrain or opt.phase == 'retrain':
+                set = frames % opt.split != 0
+
+            elif opt.phase == 'val':
+                set = frames % opt.split == 0
+
+            else:
+                set = np.ones(len(frames), dtype=bool)
+
+        frames = frames[set]
+        self.img_paths = [img_path % f for f in frames]
+        self.pc_paths = [pc_path % f for f in frames]
+
+        self.A_poses = poses[set]
         self.transform = get_posenet_transform(opt, self.mean_image)
 
-        # extract driving data
-        print('Extracting data from %s...' % driving_data, end='\t')
-        with open(driving_data, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                img_number = row['name'][-5:]
-                if opt.split > 0:
-                    if (opt.isTrain or opt.phase == 'retrain') and int(img_number) % opt.split == 0:
-                        continue
-                    if opt.phase == 'val' and int(img_number) % opt.split != 0:
-                        continue
-                i_path = os.path.join(self.root, img_path % img_number)
-                p_path = os.path.join(self.root, pc_path % img_number)
-                # ignore the line if the point cloud doesn't exist
-                if not (os.path.isfile(i_path) and os.path.isfile(p_path)):
-                    continue
-                self.img_paths.append(i_path)
-                self.pc_paths.append(p_path)
-                pose = torch.tensor((float(row['pos_x']), float(row['pos_y']), float(row['pos_z'])))
-                # for now only 1 dof of rotation is enabled
-                pose = torch.cat((pose, euler_to_quaternion(0, 0, float(row['steer'])/2)))
-                self.A_poses.append(pose)
-        print('Done')
         self.A_size = len(self.img_paths)
 
     def __getitem__(self, index):
