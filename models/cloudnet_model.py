@@ -28,7 +28,7 @@ class CloudNetModel():
 
         # load/define networks
         googlenet_weights = None
-        if self.isTrain and opt.init_weights != '':
+        if self.isTrain and self.opt.model == 'posepoint' and opt.init_weights != '':
             googlenet_file = open(os.path.join('pretrained_models', opt.init_weights), "rb")
             googlenet_weights = pickle.load(googlenet_file, encoding="bytes")
             googlenet_file.close()
@@ -90,17 +90,23 @@ class CloudNetModel():
         print('---------- Networks initialized -------------')
 
     def set_input(self, batch):
-        input_img = batch['X_img']
         input_pc = batch['X_pc']
-        input_Y = batch['Y']
-        self.image_paths = batch['X_path_img']
-        self.pc_paths = batch['X_path_pc']
-        self.input_img.resize_(input_img.size()).copy_(input_img)
+        self.pc_paths = batch['pc_path']
         self.input_pc.resize_(input_pc.size()).copy_(input_pc)
+
+        if self.opt.model == 'posepoint':
+            self.image_paths = batch['img_path']
+            input_img = batch['X_img']
+            self.input_img.resize_(input_img.size()).copy_(input_img)
+
+        input_Y = batch['Y']
         self.input_Y.resize_(input_Y.size()).copy_(input_Y)
 
     def forward(self):
-        self.pred_Y = self.netG(self.input_img, self.input_pc)
+        if self.opt.model == 'posepoint':
+            self.pred_Y = self.netG(self.input_img, self.input_pc)
+        else:
+            self.pred_Y = self.netG(self.input_pc)
 
     def backward(self):
         if self.opt.criterion == 'geo':

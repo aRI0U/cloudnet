@@ -14,9 +14,10 @@ class CloudNetDataset(Dataset):
         self.root = opt.dataroot
         driving_data = os.path.join(self.root, 'poses.txt')
         # select the folder corresponding to the right input type
-        img_path = os.path.join(self.root, 'CameraRGB1', 'image_%05d.png')
         pc_path = os.path.join(self.root, 'PointCloudLocal1', 'point_cloud_%05d.npy')
-        self.mean_image = np.load(os.path.join(self.root , 'mean_image.npy'))
+        if self.opt.model == 'posepoint':
+            img_path = os.path.join(self.root, 'CameraRGB1', 'image_%05d.png')
+            self.mean_image = np.load(os.path.join(self.root , 'mean_image.npy'))
         frames = np.loadtxt(driving_data, dtype=int, usecols=0, delimiter=';', skiprows=1)
         poses = np.loadtxt(driving_data, dtype=float, usecols=(1,2,3,4,5,6,7), delimiter=';', skiprows=1)
 
@@ -30,24 +31,28 @@ class CloudNetDataset(Dataset):
                 set = frames % opt.split == 0
 
         frames = frames[set]
-        self.img_paths = [img_path % f for f in frames]
         self.pc_paths = [pc_path % f for f in frames]
 
         self.A_poses = poses[set]
-        self.transform = get_posenet_transform(opt, self.mean_image)
+        if self.opt.model == 'posepoint':
+            self.img_paths = [img_path % f for f in frames]
+            self.transform = get_posenet_transform(opt, self.mean_image)
 
-        self.A_size = len(self.img_paths)
+        self.A_size = len(self.pc_paths)
 
     def __getitem__(self, index):
         index_A = index % self.A_size
-        img_path = self.img_paths[index_A]
         pc_path = self.pc_paths[index_A]
-        A_pose = self.A_poses[index_A]
-        A_img = Image.open(img_path).convert('RGB')
-        A_img = self.transform(A_img)
-        A_pc = self._extract_file(pc_path)
+        pose = self.A_poses[index_A]
+        pc = self._extract_file(pc_path)
 
-        return {'X_img': A_img, 'X_pc': A_pc, 'Y': A_pose, 'X_path_img': img_path, 'X_path_pc': pc_path}
+        if self.opt.model == 'posepoint':
+            img_path = self.img_paths[index_A]
+            img = Image.open(img_path).convert('RGB')
+            img = self.transform(img)
+
+            return {'X_img': img, 'X_pc': pc, 'Y': pose, 'img_path': img_path, 'pc_path': pc_path}
+        return {'X_pc': pc, 'Y': pose, 'pc_path': pc_path}
 
     def __len__(self):
         return self.A_size
@@ -70,8 +75,8 @@ class CloudNetDataset(Dataset):
             torch.FloatTensor
                 (opt.n_points,opt.input_nc) tensor of point cloud
         """
-        img = self._sample(path, self.opt.input_nc, self.opt.n_points, self.opt.sampling)
-        return torch.from_numpy(img)
+        pc = self._sample(path, self.opt.input_nc, self.opt.n_points, self.opt.sampling)
+        return torch.from_numpy(pc)
 
     @staticmethod
     def _sample(path, input_nc, n_points, sampling):
