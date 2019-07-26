@@ -80,7 +80,7 @@ class CloudNetModel():
     def set_input(self, batch):
         input_X = batch['X']
         input_Y = batch['Y']
-        self.image_paths = batch['X_paths']
+        self.image_paths = batch['X_path']
         self.input_X.resize_(input_X.size()).copy_(input_X)
         self.input_Y.resize_(input_Y.size()).copy_(input_Y)
 
@@ -122,9 +122,17 @@ class CloudNetModel():
                                 ])
 
         pos_err = torch.dist(self.pred_Y[:,:3], self.input_Y[:,:3])
-        ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-        abs_distance = torch.abs((ori_gt.mul(self.pred_Y[:,3:self.opt.output_nc])).sum())
-        ori_err = 2*180/pi * torch.acos(abs_distance)
+        if self.opt.criterion == 'log':
+            pred_a = torch.clamp(torch.norm(self.pred_Y[:,3:]), min=1e-8)
+            pred_q = torch.cat((torch.cos(pred_a).unsqueeze(0), torch.sin(pred_a)/pred_a * self.pred_Y[:,3:].squeeze(0)))
+            input_a = torch.clamp(torch.norm(self.input_Y[:,3:]), min=1e-8)
+            input_q = torch.cat((torch.cos(input_a).unsqueeze(0), torch.sin(input_a)/input_a * self.input_Y[:,3:].squeeze(0)))
+            ori_err = 2*180/pi * torch.acos(torch.abs(torch.sum(input_q*pred_q)))
+
+        else:
+            ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
+            abs_distance = torch.abs((ori_gt.mul(self.pred_Y[:,3:self.opt.output_nc])).sum())
+            ori_err = 2*180/pi * torch.acos(abs_distance)
         return [pos_err.item(), ori_err.item()]
 
     def get_current_pose(self):

@@ -90,12 +90,13 @@ class GeometricLoss(_Loss):
     def forward(self, pc, input, target):
         return geometric_loss(pc, input, target, self.p, reduction=self.reduction)
 
-def qlog(q):
-    n = torch.norm(q[:,1:], p=2, dim=1, keepdim=True)
-    n = torch.clamp(n, min=1e-8)
-    q = q[:,1:] * torch.acos(torch.clamp(q[:,:1], min=-1.0, max=1.0))
-    q = q / n
-    return q
+# def qlog(q):
+#     n = torch.norm(q[:,1:], p=2, dim=1, keepdim=True)
+#     n = torch.clamp(n, min=1e-8)
+#     q = q[:,1:] * torch.acos(torch.clamp(q[:,:1], min=-1.0, max=1.0))
+#     q = q / n
+#     return q
+
 
 
 
