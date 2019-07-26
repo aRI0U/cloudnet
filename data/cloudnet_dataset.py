@@ -1,14 +1,17 @@
 import numpy as np
 import os
+from PIL import Image
 
 import torch
 from torch.utils.data import Dataset
 
+from data.base_dataset import get_posenet_transform
 
 def qlog(q):
     n = np.minimum(np.linalg.norm(q[:,1:], axis=1), 1e-8)
     log = q[:,:1] * np.arccos(np.clip(q[:,1:], -1, 1))
     return log/n[:,np.newaxis]
+
 
 class CloudNetDataset(Dataset):
     def initialize(self, opt):
@@ -17,6 +20,10 @@ class CloudNetDataset(Dataset):
         driving_data = os.path.join(self.root, 'poses.txt')
         # select the folder corresponding to the right input type
         pc_path = os.path.join(self.root, 'PointCloudLocal1', 'point_cloud_%05d.npy')
+
+        if self.opt.model == 'posepoint':
+            img_path = os.path.join(self.root, 'CameraRGB1', 'image_%05d.png')
+            self.mean_image = np.load(os.path.join(self.root , 'mean_image.npy'))
 
         frames = np.loadtxt(driving_data, dtype=int, usecols=0, delimiter=';', skiprows=1)
         poses = np.loadtxt(driving_data, dtype=float, usecols=(1,2,3,4,5,6,7), delimiter=';', skiprows=1)
@@ -33,6 +40,10 @@ class CloudNetDataset(Dataset):
         frames = frames[set]
         self.pc_paths = [pc_path % f for f in frames]
 
+        if self.opt.model == 'posepoint':
+            self.img_paths = [img_path % f for f in frames]
+            self.transform = get_posenet_transform(opt, self.mean_image)
+
         self.poses = poses[set]
 
         if opt.criterion == 'log':
@@ -44,10 +55,15 @@ class CloudNetDataset(Dataset):
         index_A = index % self.size
         pc_path = self.pc_paths[index_A]
         pose = self.poses[index_A]
-
         pc = self._extract_file(pc_path)
 
-        return {'X': pc, 'Y': pose, 'X_path': pc_path}
+        if self.opt.model == 'posepoint':
+            img_path = self.img_paths[index_A]
+            img = Image.open(img_path).convert('RGB')
+            img = self.transform(img)
+
+            return {'X_img': img, 'X_pc': pc, 'Y': pose, 'img_path': img_path, 'pc_path': pc_path}
+        return {'X_pc': pc, 'Y': pose, 'pc_path': pc_path}
 
     def __len__(self):
         return self.size
@@ -70,8 +86,8 @@ class CloudNetDataset(Dataset):
             torch.FloatTensor
                 (opt.n_points,opt.input_nc) tensor of point cloud
         """
-        img = self._sample(path, self.opt.input_nc, self.opt.n_points, self.opt.sampling)
-        return torch.from_numpy(img)
+        pc = self._sample(path, self.opt.input_nc, self.opt.n_points, self.opt.sampling)
+        return torch.from_numpy(pc)
 
     @staticmethod
     def _sample(path, input_nc, n_points, sampling):

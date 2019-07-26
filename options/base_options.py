@@ -37,7 +37,7 @@ class BaseOptions():
         self.base.add_argument('--lr_decay_iters', type=int, default=20, help='multiply by a gamma every lr_decay_iters iterations')
         self.base.add_argument('--lstm_hidden_size', type=int, default=256, help='hidden size of the LSTM layer in PoseLSTM')
         self.base.add_argument('--max_dataset_size', type=int, default=float("inf"), help='Maximum number of samples allowed per dataset. If the dataset directory contains more than max_dataset_size, only a subset is loaded.')
-        self.base.add_argument('--model', type=str, choices=['posenet','poselstm','cloudnet','cloudnetvlad'], default='cloudcnn', help='model to use')
+        self.base.add_argument('--model', type=str, choices=['cloudcnn','posepoint','cloudnet','cloudnetvlad'], default='cloudcnn', help='model to use')
         self.param.add_argument('--name', type=str, default=None, help='name of the experiment. It decides where to store samples and models')
         self.base.add_argument('--no_dropout', action='store_true', help='no dropout for the generator')
         self.base.add_argument('--no_flip', action='store_true', default=True, help='if specified, do not flip the images for data augmentation')
@@ -93,33 +93,34 @@ class BaseOptions():
             else:
                 if not self.isTrain or self.opt.continue_train:
                     self.opt.ID = db.find_experiment(name=self.opt.name)
-                    print(self.opt.ID)
-                    print('Loading options from the experiment...', end='\t')
-                    opt_vals, opt_names = db.find_info(self.opt.ID, '*', get_col_names=True)
 
-                    for i, opt in enumerate(opt_names):
-                        if opt == 'id':
-                            continue
-                        opt_type = eval('type(self.opt.%s)' % opt)
-                        if opt_vals[i] is None:
-                            fmt = '%s'
-                        elif opt_type == bool:
-                            fmt = 'bool(%s)'
-                        elif opt_type == int:
-                            fmt = '%s'
-                        elif opt_type == float:
-                            fmt = 'float("%s")'
-                        elif opt_type == str:
-                            fmt = '"%s"'
+                    if self.opt.ID is None:
+                        if self.isTrain:
+                            self.opt.continue_train = False
                         else:
-                            raise TypeError("Unparsed type: %s" % str(type))
-                        exec(('self.opt.%s = '+fmt) % (opt, opt_vals[i]))
-                    print('Done.')
-                if self.opt.ID is None:
-                    if self.isTrain:
-                        self.opt.continue_train = False
+                            raise ValueError("There is no model with such a name: %s" % self.opt.name)
                     else:
-                        raise ValueError("There is no model with such a name: %s" % self.opt.name)
+                        print('Loading options from the experiment...', end='\t')
+                        opt_vals, opt_names = db.find_info(self.opt.ID, '*', get_col_names=True)
+
+                        for i, opt in enumerate(opt_names):
+                            if opt == 'id':
+                                continue
+                            opt_type = eval('type(self.opt.%s)' % opt)
+                            if opt_vals[i] is None:
+                                fmt = '%s'
+                            elif opt_type == bool:
+                                fmt = 'bool(%s)'
+                            elif opt_type == int:
+                                fmt = '%s'
+                            elif opt_type == float:
+                                fmt = 'float("%s")'
+                            elif opt_type == str:
+                                fmt = '"%s"'
+                            else:
+                                raise TypeError("Unparsed type: %s" % str(type))
+                            exec(('self.opt.%s = '+fmt) % (opt, opt_vals[i]))
+                        print('Done.')
 
             if self.opt.beta > 1:
                 self.opt.beta = self.opt.beta/(self.opt.beta+1)

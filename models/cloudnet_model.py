@@ -22,8 +22,17 @@ class CloudNetModel():
         self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
 
         # define tensors
-        self.input_X = self.Tensor(opt.batchSize, opt.n_points, opt.input_nc)
+        self.input_img = self.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
+        self.input_pc = self.Tensor(opt.batchSize, opt.n_points, opt.input_nc)
         self.input_Y = self.Tensor(opt.batchSize, opt.output_nc)
+
+        # load/define networks
+        googlenet_weights = None
+        if self.isTrain and self.opt.model == 'posepoint' and opt.init_weights != '':
+            googlenet_file = open(os.path.join('pretrained_models', opt.init_weights), "rb")
+            googlenet_weights = pickle.load(googlenet_file, encoding="bytes")
+            googlenet_file.close()
+            print('initializing the weights from '+ opt.init_weights)
 
         # define network
         use_gpu = len(self.gpu_ids) > 0
@@ -37,6 +46,9 @@ class CloudNetModel():
         elif opt.model == 'cloudcnn':
             from models.cloudcnn import CloudCNN
             self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points, use_gpu=use_gpu)
+        elif opt.model == 'posepoint':
+            from models.posepoint import PosePoint
+            self.netG = PosePoint(opt.input_nc, opt.output_nc, opt.n_points, init_from=googlenet_weights, isTest=not self.isTrain, gpu_ids=self.gpu_ids)
         else:
             raise ValueError('Model [%s] does not exist' % model)
 
@@ -78,14 +90,23 @@ class CloudNetModel():
         print('---------- Networks initialized -------------')
 
     def set_input(self, batch):
-        input_X = batch['X']
+        input_pc = batch['X_pc']
+        self.pc_paths = batch['pc_path']
+        self.input_pc.resize_(input_pc.size()).copy_(input_pc)
+
+        if self.opt.model == 'posepoint':
+            self.image_paths = batch['img_path']
+            input_img = batch['X_img']
+            self.input_img.resize_(input_img.size()).copy_(input_img)
+
         input_Y = batch['Y']
-        self.image_paths = batch['X_path']
-        self.input_X.resize_(input_X.size()).copy_(input_X)
         self.input_Y.resize_(input_Y.size()).copy_(input_Y)
 
     def forward(self):
-        self.pred_Y = self.netG(self.input_X)
+        if self.opt.model == 'posepoint':
+            self.pred_Y = self.netG(self.input_img, self.input_pc)
+        else:
+            self.pred_Y = self.netG(self.input_pc)
 
     def backward(self):
         if self.opt.criterion == 'geo':

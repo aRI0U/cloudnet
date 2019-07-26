@@ -39,7 +39,7 @@ if input('Continue? [y/n] ').lower() in 'yes':
 
             with Database(checkpoints) as db:
                 id = db.find_experiment(name=name)
-                for table in ['options', 'test', 'tmp']:
+                for table in ['options', 'test', 'tmp','branches']:
                     db._exec("DELETE FROM %s WHERE id = ?" % table, (id,))
                 db.commit()
 
