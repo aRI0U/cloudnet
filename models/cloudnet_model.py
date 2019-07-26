@@ -133,7 +133,7 @@ class CloudNetModel():
 
     # get image paths
     def get_image_paths(self):
-        return self.image_paths
+        return self.pc_paths
 
     def get_current_errors(self):
         if self.opt.isTrain:
