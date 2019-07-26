@@ -7,7 +7,6 @@ import torch.nn.functional as F
 from torch_geometric.nn import XConv, fps, knn
 
 from models.net import Net
-from models.mdn import MDN
 
 class XConvolution(nn.Module):
     r"""
@@ -17,7 +16,7 @@ class XConvolution(nn.Module):
         super(XConvolution, self).__init__()
         self.C_mid1 = C_mid1
         self.C_out = C_out
-        self.xconv = XConv(C_in, C_mid1, 3, 4)
+        self.xconv = XConv(C_in, C_mid1, 3, 4, hidden_channels=max(C_in//4, 2))
 
         self.conv = nn.Conv2d(ceil(n_points/4), ceil(n_points/4), (4,1))
 
@@ -34,26 +33,14 @@ class XConvolution(nn.Module):
         col = N*torch.arange(B).unsqueeze(1)
         return (row + col).view(-1).cuda()
 
-    @staticmethod
-    def debug_nan(x, *args):
-        if not (x >= 0 or x <= 0):
-            for arg in args:
-                print(arg)
-            raise ValueError("NAN")
-
-
     def forward(self, x, p, batch):
         # print('xconv')
         B, N, d = x.shape
         pos = p.view(B*N, -1)
         features = x.view(B*N, -1)
-        self.debug_nan(features[0,0], features)
         idx = fps(pos, batch, ratio=0.25, random_start=True)
-        self.debug_nan(idx[0], idx)
         knn_idx = knn(pos, pos[idx], 4, batch_x=batch, batch_y=batch[idx])[1]
-        self.debug_nan(knn_idx[0])
         x = self.xconv(features, pos, batch=batch)
-        self.debug_nan(x[0,0], x, knn_idx, features, pos)
         x = x[knn_idx].view(B, ceil(N/4), 4, self.C_mid1)
         x = self.fc(x)
         x = self.conv(x).view(B, ceil(N/4), self.C_out)
@@ -63,7 +50,7 @@ class CloudCNN(Net):
     r"""
         CloudCNN: neural network inspired from PointCNN used for relocalization.
     """
-    def __init__(self, input_nc, output_nc, n_points, num_gaussians, use_gpu):
+    def __init__(self, input_nc, output_nc, n_points, use_gpu):
         super(CloudCNN, self).__init__(input_nc, output_nc, n_points, use_gpu)
         self.xconv1 = XConvolution(input_nc, 16, 24, 32, n_points)
         self.xconv2 = XConvolution(32, 64, 96, 128, ceil(n_points/4))
@@ -71,13 +58,18 @@ class CloudCNN(Net):
 
         self.conv = nn.Conv1d(ceil(n_points/64), 1, 1)
 
-        self.mdn = MDN(512, output_nc, num_gaussians)
-
         self.fc = nn.Sequential(
-            nn.Linear(512, 128),
-            nn.Tanh(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
             nn.Linear(128, output_nc)
         )
+
+        for xconv in [self.xconv1, self.xconv2, self.xconv3]:
+            for child in xconv.children():
+                for param in child.parameters():
+                    param.requires_grad = False
 
     @staticmethod
     def debug_nan(x, *args):
@@ -87,7 +79,7 @@ class CloudCNN(Net):
             raise ValueError("NAN")
 
 
-    def forward(self, input, epoch):
+    def forward(self, input):
         B, N, d = input.shape
         pos, features = self._split_point_cloud(input)
         # hierarchical X-convolutions
@@ -97,13 +89,7 @@ class CloudCNN(Net):
 
         x = self.conv(x).view(B, 512)
 
-        if epoch >= 100:
-            pi, sigma, mu = self.mdn(x)
-        else:
-            pi, sigma, mu = None, None, self.fc(x).unsqueeze(0)
-        # normalize quaterions
-        output = torch.cat((mu[...,:3], F.normalize(mu[...,3:self.output_nc], p=2, dim=-1)), dim=-1)
-        return pi, sigma, output
+        return x
 
 
 

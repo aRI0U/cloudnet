@@ -57,7 +57,7 @@ with Database(opt.db_dir) as db:
 
             for i, data in enumerate(dataset):
                 model.set_input(data)
-                model.test(epoch)
+                model.test()
                 img_path = model.get_image_paths()[0]
                 print('\t%04d/%04d: process image... %s' % (i, len(dataset), img_path), end='\r')
                 image_path = img_path.split('/')[-2] + '/' + img_path.split('/')[-1]

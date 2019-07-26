@@ -35,8 +35,10 @@ class MDN(nn.Module):
         self.out_features = out_features
         self.num_gaussians = num_gaussians
         self.hidden = nn.Sequential(
-            nn.Linear(in_features, in_features//4),
-            nn.Tanh()
+            nn.Linear(in_features, in_features//2),
+            nn.ReLU(),
+            nn.Linear(in_features//2, in_features//4),
+            nn.ReLU()
         )
         self.pi = nn.Sequential(
             nn.Linear(in_features//4, num_gaussians),

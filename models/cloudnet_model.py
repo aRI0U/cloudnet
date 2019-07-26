@@ -6,7 +6,7 @@ import pickle
 import torch
 import torch.nn.functional as F
 
-from models.mdn import mdn_loss
+from models.mdn import MDN, mdn_loss
 import util.util as util
 from util.geometry import GeometricLoss
 
@@ -17,6 +17,7 @@ class CloudNetModel():
     def initialize(self, opt):
         print(self.name())
         self.opt = opt
+        self.opt.mdn = True
         self.gpu_ids = opt.gpu_ids
         self.isTrain = opt.isTrain
 
@@ -38,13 +39,15 @@ class CloudNetModel():
             self.netG = CloudNet(opt.input_nc, opt.output_nc, opt.n_points)
         elif opt.model == 'cloudcnn':
             from models.cloudcnn import CloudCNN
-            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points, 3, use_gpu=use_gpu)
+            self.netG = CloudCNN(opt.input_nc, opt.output_nc, opt.n_points, use_gpu=use_gpu)
         else:
             raise ValueError('Model [%s] does not exist' % model)
 
+        self.mdn = MDN(512, opt.output_nc, 3)
+
         if use_gpu:
             self.netG.cuda(self.gpu_ids[0])
-
+            self.mdn.cuda(self.gpu_ids[0])
 
         if self.isTrain:
             self.old_lr = opt.lr
@@ -55,6 +58,9 @@ class CloudNetModel():
                                                 lr=opt.lr, eps=1,
                                                 weight_decay=0.001,
                                                 betas=(self.opt.adambeta1, self.opt.adambeta2))
+
+
+
 
             self.scheduler = None
 
@@ -80,37 +86,45 @@ class CloudNetModel():
         self.input_X.resize_(input_X.size()).copy_(input_X)
         self.input_Y.resize_(input_Y.size()).copy_(input_Y)
 
-    def forward(self, epoch):
-        self.pred_Y = self.netG(self.input_X, epoch)
-
-    def backward(self, epoch):
-        pi, sigma, mu = self.pred_Y
-        if epoch < 100:
-            criterion = self.criterions[0]
-            self.loss_pos = criterion(mu[...,:3].squeeze(0), self.input_Y[:,:3])
-            self.loss_ori = criterion(mu[...,3:].squeeze(0), self.input_Y[:,3:])
+    def forward(self):
+        if self.opt.mdn:
+            feature_vector = self.netG(self.input_X)
+            self.pred_Y = self.mdn(feature_vector)
         else:
+            self.pred_Y = self.netG(self.input_X)
+
+    def backward(self):
+        # print(self.pred_Y)
+        if self.opt.mdn:
+            pi, sigma, mu = self.pred_Y
             criterion = self.criterions[1]
             self.loss_pos = criterion(pi, sigma[...,:3], mu[...,:3], self.input_Y[:,:3])
             self.loss_ori = criterion(pi, sigma[...,3:], mu[...,3:], self.input_Y[:,3:])
             # self.regularizer = 0.1*torch.mean(sigma[...,:3])
             # pose = self.get_best_pose()
             print('%.3f\t%.3f\t%.3f\t%.3f' % (torch.min(sigma[...,:3]).item(), torch.max(sigma[...,:3]).item(), torch.mean(sigma[...,:3]).item(), torch.median(sigma[...,:3]).item()))
+
+        else:
+            criterion = self.criterions[0]
+            self.loss_pos = criterion(mu[...,:3].squeeze(0), self.input_Y[:,:3])
+            self.loss_ori = criterion(mu[...,3:].squeeze(0), self.input_Y[:,3:])
+
         self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori# + self.regularizer
         self.loss.backward()
 
-    def optimize_parameters(self, epoch):
+    def optimize_parameters(self):
         self.optimizer.zero_grad()
-        self.forward(epoch)
-        self.backward(epoch)
+        self.forward()
+        self.backward()
         self.optimizer.step()
 
     # no backprop gradients
-    def test(self, epoch):
-        self.forward(epoch)
+    def test(self):
+        self.forward()
 
     def get_best_pose(self):
         pi, sigma, mu = self.pred_Y
+        print(mu)
         return mu[:,torch.max(pi, dim=1).indices].squeeze(1) if pi is not None else mu.squeeze(1)
 
     # get image paths
@@ -156,6 +170,7 @@ class CloudNetModel():
             'epoch': epoch,
             'network_SD': self.netG.state_dict(),
             'optimizer_SD': self.optimizer.state_dict(),
+            'MDN_SD': self.mdn.state_dict() if self.opt.mdn else None,
             'loss': self.loss
         }, path)
 
@@ -165,8 +180,16 @@ class CloudNetModel():
         path = os.path.join(self.save_dir, filename)
 
         checkpoint = torch.load(path)
-        assert checkpoint['epoch'] == int(epoch)
+        assert checkpoint['epoch'] == epoch
         self.netG.load_state_dict(checkpoint['network_SD'])
+
+        try:
+            mdn_dict = checkpoint['MDN_SD']
+            if mdn_dict is not None:
+                self.mdn.load_state_dict(mdn_dict)
+        except KeyError:
+            print('No state dict for MDN')
+            pass
 
         if self.isTrain:
             self.optimizer.load_state_dict(checkpoint['optimizer_SD'])

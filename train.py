@@ -33,9 +33,9 @@ if opt.continue_train:
     if opt.which_epoch == 'latest':
         with Database(opt.db_dir) as db:
             opt.epoch_count = db.get_last_epoch(opt.ID)+1
-        opt.which_epoch = str(opt.epoch_count-1)
+        opt.which_epoch = opt.epoch_count-1
     else:
-        opt.epoch_count = int(opt.which_epoch)+1
+        opt.epoch_count = opt.which_epoch+1
 
 model = create_model(opt)
 visualizer = Visualizer(opt)
@@ -56,7 +56,7 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         total_steps += opt.batchSize
         epoch_iter += opt.batchSize
         model.set_input(batch)
-        model.optimize_parameters(epoch)
+        model.optimize_parameters()
         #
         # if total_steps % opt.display_freq == 0:
         #     save_result = total_steps % opt.update_html_freq == 0
