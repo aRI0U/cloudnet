@@ -56,20 +56,21 @@ class CloudCNN(Net):
         self.xconv2 = XConvolution(32, 64, 96, 128, ceil(n_points/4))
         self.xconv3 = XConvolution(128, 256, 384, 512, ceil(n_points/16))
 
-        self.conv = nn.Conv1d(ceil(n_points/64), 1, 1)
+        # self.conv = nn.Conv1d(ceil(n_points/64), 1, 1)
 
-        self.fc = nn.Sequential(
+        self.fc1 = nn.Sequential(
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, output_nc)
+            nn.ReLU()
         )
 
-        for xconv in [self.xconv1, self.xconv2, self.xconv3]:
-            for child in xconv.children():
-                for param in child.parameters():
-                    param.requires_grad = False
+        self.fc2 = nn.Linear(128, output_nc)
+
+        # for xconv in [self.xconv1, self.xconv2, self.xconv3]:
+        #     for child in xconv.children():
+        #         for param in child.parameters():
+        #             param.requires_grad = False
 
     @staticmethod
     def debug_nan(x, *args):
@@ -87,8 +88,9 @@ class CloudCNN(Net):
         x, p = self.xconv2(x, p, self._batch_indicator(B, ceil(N/4), self.use_gpu))
         x, p = self.xconv3(x, p, self._batch_indicator(B, ceil(N/16), self.use_gpu))
 
-        x = self.conv(x).view(B, 512)
-
+        x = torch.mean(x, dim=1).view(B, 512)
+        x = self.fc1(x)
+        x = self.fc2(x)
         return x
 
 

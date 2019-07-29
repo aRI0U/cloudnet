@@ -17,7 +17,7 @@ class CloudNetModel():
     def initialize(self, opt):
         print(self.name())
         self.opt = opt
-        self.opt.mdn = True
+        self.opt.mdn = False
         self.gpu_ids = opt.gpu_ids
         self.isTrain = opt.isTrain
 
@@ -106,8 +106,8 @@ class CloudNetModel():
 
         else:
             criterion = self.criterions[0]
-            self.loss_pos = criterion(mu[...,:3].squeeze(0), self.input_Y[:,:3])
-            self.loss_ori = criterion(mu[...,3:].squeeze(0), self.input_Y[:,3:])
+            self.loss_pos = criterion(self.pred_Y[:,:3], self.input_Y[:,:3])
+            self.loss_ori = criterion(self.pred_Y[:,3:], self.input_Y[:,3:])
 
         self.loss = (1-self.opt.beta)*self.loss_pos + self.opt.beta*self.loss_ori# + self.regularizer
         self.loss.backward()
