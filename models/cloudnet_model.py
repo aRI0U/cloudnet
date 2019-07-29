@@ -123,6 +123,8 @@ class CloudNetModel():
         self.forward()
 
     def get_best_pose(self):
+        if not self.opt.mdn:
+            return self.pred_Y
         pi, sigma, mu = self.pred_Y
         print(mu)
         return mu[:,torch.max(pi, dim=1).indices].squeeze(1) if pi is not None else mu.squeeze(1)
@@ -142,10 +144,11 @@ class CloudNetModel():
         # print(self.pred_Y[-1])
         # print([torch.dist(p[:3], self.input_Y[:,:3]).item() for p in self.pred_Y[-1].squeeze(0)])
         # pos_err = torch.dist(pred[:,:3], self.input_Y[:,:3])
-        pos_err = min([torch.dist(p[:3], self.input_Y[:,:3]) for p in self.pred_Y[-1].squeeze(0)])
+        pos_err = torch.dist(pred[:,:3], self.input_Y[:,:3])
         # print(pos_err)
         ori_gt = F.normalize(self.input_Y[:,3:], p=2, dim=1)
-        abs_distance = torch.abs((ori_gt.mul(pred[:,3:self.opt.output_nc])).sum())
+        ori_pred = F.normalize(pred[:,3:], p=2, dim=1)
+        abs_distance = torch.abs((ori_gt.mul(ori_pred)).sum())
         ori_err = 2*180/pi * torch.acos(abs_distance)
         return [pos_err.item(), ori_err.item()]
 
