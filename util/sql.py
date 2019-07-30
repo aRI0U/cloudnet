@@ -492,8 +492,9 @@ def copy_from_saved():
 
 
 if __name__ == '__main__':
-    connect("./checkpoints")
-    c = connection.cursor()
+    with Database('checkpoints') as db:
+        db._exec("DELETE FROM test WHERE id = 232 AND epoch > 200")
+        db.commit()
     # for f in glob.iglob('./checkpoints/cloudcnn/*'):
     #     print(f)
     #     _add_experiment(f)
@@ -514,4 +515,3 @@ if __name__ == '__main__':
     #     print(row)
     # remove_empty_tests()
     # connection.commit()
-    close()

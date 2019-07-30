@@ -44,8 +44,9 @@ class MDN(nn.Module):
             nn.Linear(in_features//4, num_gaussians),
             nn.Softmax(dim=1)
         )
+
         self.sigma = nn.Sequential(
-            nn.Linear(in_features//4, out_features*num_gaussians),
+            nn.Linear(in_features//4, 2*num_gaussians),
             nn.Softplus()
             # nn.Sigmoid()
         )
@@ -56,16 +57,16 @@ class MDN(nn.Module):
 
 
     def forward(self, input):
-        hidden = self.hidden(input)
+        hidden = input
         pi = self.pi(hidden)
-        sigma = self.sigma(hidden).view(-1, self.num_gaussians, self.out_features)
+        sigma = self.sigma(hidden).view(-1, self.num_gaussians,2)
         mu = self.mu(hidden).view(-1, self.num_gaussians, self.out_features)
-        if not (mu[0,0,0] >= 0 or mu[0,0,0] < 0):
-            print(input)
-            print(pi)
-            print(sigma)
-            print(mu)
-            raise ValueError("NAN")
+        # if not (mu[0,0,0] >= 0 or mu[0,0,0] < 0):
+        #     print(input)
+        #     print(pi)
+        #     print(sigma)
+        #     print(mu)
+        #     raise ValueError("NAN")
         return pi, sigma, mu
 
 
@@ -91,7 +92,7 @@ def gaussian_probability(sigma, mu, target):
     return torch.prod(ret, 2)
 
 
-def mdn_loss(pi, sigma, mu, target):
+def mdn_loss(pi, sigma, mu, target, param='pos'):
     # type: (torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor) -> torch.FloatTensor
     r"""
         Calculates the error, given the MoG parameters and the target
@@ -114,7 +115,35 @@ def mdn_loss(pi, sigma, mu, target):
         torch.FloatTensor
             the negative log-likelihood of the distribution
     """
-    target = target.unsqueeze(1).expand_as(sigma)
+    c = ['pos', 'ori'].index(param)
+    target = target.unsqueeze(1).expand_as(mu)
+    # s = torch.clamp(sigma, min=1e-4)
+    # norms = 0.5*(torch.norm(mu-target, dim=2)/s)**2
+    # values = torch.min(norms, dim=1).values
+    # exp = torch.exp(values.unsqueeze(1) - norms)
+    # weights = pi / (s**target.size(2))
+    # ll = torch.log(torch.sum(weights*exp, dim=1)) - values
+    # print(exp)
+    # print(s)
+    # print(weights)
+    # print(torch.log(torch.sum(weights*exp, dim=1)))
+    # return -torch.mean(ll)
+    sigma = sigma[...,c]
+    coeffs = -1/torch.zeros(pi.shape).cuda()
+    s = sigma>1e-4
+    # print('sigma', sigma)
+    # print('pi', pi)
+    norms = torch.norm(mu-target, dim=2)
+    if c == 0:
+        print('%.3f\t%.3f\t%.3f\t%.3f' % (torch.min(norms).item(), torch.max(norms).item(), torch.mean(norms).item(), torch.median(norms).item()))
+    coeffs[s] = torch.log(pi[s]/sigma[s]**c+3) - 0.5*(norms[s]/sigma[s])**2
+    # print(coeffs)
+    # print(torch.logsumexp(coeffs, dim=1))
+    return -torch.mean(torch.logsumexp(coeffs, dim=1))
+
+
+    ###
+
     norms = ((mu-target)/sigma)**2
     # print(norms)
     norms = 0.5*torch.sum(norms, dim=2)
@@ -131,6 +160,9 @@ def mdn_loss(pi, sigma, mu, target):
     # print(-torch.mean(ll))
     m = torch.mean(ll)
     if not (m >= 0 or m < 0):
+        print(pi)
+        print(sigma)
+        print(mu)
         raise ValueError("NAN")
     return -m#torch.mean(ll)
 

@@ -42,9 +42,11 @@ with Database(opt.db_dir) as db:
         epoch += 1
         if not os.path.isfile(os.path.join(checkpoints_dir, '%d_net_G.tar' % epoch)):
             continue
+
         test_pkey = (opt.ID, epoch, opt.phase)
         if db.is_test(*test_pkey):
             continue
+        print(epoch, last_epoch)
         db.new_test(*test_pkey)
         db.commit()
 

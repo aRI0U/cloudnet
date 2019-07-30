@@ -98,10 +98,11 @@ class CloudNetModel():
         if self.opt.mdn:
             pi, sigma, mu = self.pred_Y
             criterion = self.criterions[1]
-            self.loss_pos = criterion(pi, sigma[...,:3], mu[...,:3], self.input_Y[:,:3])
-            self.loss_ori = criterion(pi, sigma[...,3:], mu[...,3:], self.input_Y[:,3:])
+            self.loss_pos = criterion(pi, sigma, mu[...,:3], self.input_Y[:,:3])
+            self.loss_ori = criterion(pi, sigma, mu[...,3:], self.input_Y[:,3:])
             # self.regularizer = 0.1*torch.mean(sigma[...,:3])
             # pose = self.get_best_pose()
+            # print('%.3f\t%.3f\t%.3f\t%.3f' % (torch.min(sigma[...,:3]).item(), torch.max(sigma[...,:3]).item(), torch.mean(sigma[...,:3]).item(), torch.median(sigma[...,:3]).item()))
             print('%.3f\t%.3f\t%.3f\t%.3f' % (torch.min(sigma[...,:3]).item(), torch.max(sigma[...,:3]).item(), torch.mean(sigma[...,:3]).item(), torch.median(sigma[...,:3]).item()))
 
         else:
@@ -126,7 +127,6 @@ class CloudNetModel():
         if not self.opt.mdn:
             return self.pred_Y
         pi, sigma, mu = self.pred_Y
-        print(mu)
         return mu[:,torch.max(pi, dim=1).indices].squeeze(1) if pi is not None else mu.squeeze(1)
 
     # get image paths

@@ -67,10 +67,18 @@ class CloudCNN(Net):
 
         self.fc2 = nn.Linear(128, output_nc)
 
-        # for xconv in [self.xconv1, self.xconv2, self.xconv3]:
-        #     for child in xconv.children():
-        #         for param in child.parameters():
-        #             param.requires_grad = False
+        self.fc = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 3*output_nc)
+        )
+
+        for layer in [self.xconv1, self.xconv2, self.xconv3]:
+            for child in layer.children():
+                for param in child.parameters():
+                    param.requires_grad = False
 
     @staticmethod
     def debug_nan(x, *args):
@@ -90,7 +98,7 @@ class CloudCNN(Net):
 
         x = torch.mean(x, dim=1).view(B, 512)
         x = self.fc1(x)
-        x = self.fc2(x)
+        # x = self.fc2(x)
         return x
 
 

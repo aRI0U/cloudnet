@@ -1,5 +1,5 @@
 # CloudNet: Deep Neural Network for Relocalization in Point Clouds Maps
-This is the PyTorch implementation for PoseLSTM and PoseNet, developed based on [Pix2Pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) code.
+This is the PyTorch implementation for CloudNet, a neural network realized during a research internship. The code is based on the [PoseLSTM](https://github.com/hazirbas/poselstm-pytorch) code.
 
 ## Prerequisites
 - Linux
@@ -80,4 +80,4 @@ wget https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/places-google
 }
 ```
 ## Acknowledgments
-Code is inspired by [pytorch-CycleGAN-and-pix2pix]((https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix)).
+Code is inspired by [poselstm-pytorch](https://github.com/hazirbas/poselstm-pytorch).

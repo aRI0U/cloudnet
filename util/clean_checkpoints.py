@@ -13,7 +13,7 @@ start = time.time()
 
 with Database(DB_DIR) as db:
     # delete empty directories
-    request = "SELECT name FROM options JOIN last_epochs ON options.id = last_epochs.id AND epoch = 0"
+    request = "SELECT name FROM options JOIN last_epochs ON options.id = last_epochs.id AND epoch < 100"
     print(request)
     print('Deleting empty directories...')
     for row, in db.c.execute(request):
@@ -30,7 +30,14 @@ with Database(DB_DIR) as db:
             WHERE epoch = 0
         )
     """)
-    db._exec("DELETE FROM last_epochs WHERE epoch = 0")
+    db._exec("""
+        DELETE FROM test
+        WHERE id IN (
+            SELECT id FROM last_epochs
+            WHERE epoch = 0
+        )
+    """)
+    db._exec("DELETE FROM last_epochs WHERE epoch < 100")
     db.commit()
     raise IndexError
     i = 0
