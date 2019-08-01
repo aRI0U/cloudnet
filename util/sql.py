@@ -492,26 +492,6 @@ def copy_from_saved():
 
 
 if __name__ == '__main__':
-    connect("./checkpoints")
-    c = connection.cursor()
-    # for f in glob.iglob('./checkpoints/cloudcnn/*'):
-    #     print(f)
-    #     _add_experiment(f)
-    # c.execute("DELETE FROM options WHERE name = 'cloudcnn/2019-06-19_21:16'")
-    #
-    # connection.commit()
-    # c.execute("DELETE FROM options WHERE name = 'cloudcnn/2019-05-28_12:34'")
-    # connection.commit()
-    # # c.execute('DELETE FROM options WHERE name = ""')
-    # # c.execute("UPDATE options SET last_epoch = 130 WHERE name = 'cloudcnn/2019-06-01_11:13'")
-    # # for row in c.execute('SELECT n_points, beta, sampling, criterion, name, last_epoch FROM options ORDER BY name'):
-    # #     print(row)
-    # # print(find_info('cloudcnn/2019-05-28_09:09', '*', True))
-    # c.execute("UPDATE options SET last_epoch = 500 WHERE name = 'cloudnet/2019-06-27_14:17'")
-    # for row in c.execute("""
-    #     SELECT  FROM options WHERE name = 'cloudnet/2019-06-27_14:17'
-    # """):
-    #     print(row)
-    # remove_empty_tests()
-    # connection.commit()
-    close()
+    with Database('./checkpoints') as db:
+        db._exec("DELETE FROM test WHERE id = 19")
+        db.commit()
