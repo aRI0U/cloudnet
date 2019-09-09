@@ -75,6 +75,7 @@ class BaseOptions():
         if self.opt.db_dir is None:
             self.opt.db_dir = self.opt.checkpoints_dir
 
+        os.makedirs(self.opt.db_dir, exist_ok=True)
         with Database(self.opt.db_dir) as db:
             db.init_tables()
             id = None

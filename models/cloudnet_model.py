@@ -112,7 +112,7 @@ class CloudNetModel():
         if self.opt.criterion == 'geo':
             self.loss_pos = torch.tensor(0)
             self.loss_ori = torch.tensor(0)
-            self.loss = self.criterion(self.input_X[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
+            self.loss = self.criterion(self.input_pc[...,:3].transpose(1,2).contiguous(), self.input_Y, self.pred_Y)
 
         else:
             self.loss_pos = self.criterion(self.pred_Y[:,:3], self.input_Y[:,:3])

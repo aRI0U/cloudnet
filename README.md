@@ -1,5 +1,5 @@
 # CloudNet: Deep Neural Network for Relocalization in Point Clouds Maps
-This is the PyTorch implementation for PoseLSTM and PoseNet, developed based on [Pix2Pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) code.
+This is the PyTorch implementation for CloudNet, a neural network realized during a research internship. The code is based on the [PoseLSTM](https://github.com/hazirbas/poselstm-pytorch) code.
 
 ## Prerequisites
 - Linux
@@ -15,51 +15,43 @@ git clone https://github.com/aRI0U/cloudnet.git
 python3 -m pip install -r requirements.txt
 ```
 
-# TODO
+### Train a model
 
-### PoseNet train/test
-- Download a Cambridge Landscape dataset (e.g. [KingsCollege](http://mi.eng.cam.ac.uk/projects/relocalisation/#dataset)) under datasets/folder.
-- Compute the mean image
-```bash
-python util/compute_image_mean.py --dataroot datasets/KingsCollege --height 256 --width 455 --save_resized_imgs
-```
-- Train a model:
-```bash
-python train.py --model posenet --dataroot ./datasets/KingsCollege --name posenet/KingsCollege/beta500 --beta 500 --gpu 0
-```
-- To view training errors and loss plots, set `--display_id 1`, run `python -m visdom.server` and click the URL http://localhost:8097. Checkpoints are saved under `./checkpoints/posenet/KingsCollege/beta500/`.
-- Test the model:
-```bash
-python test.py --model posenet  --dataroot ./datasets/KingsCollege --name posenet/KingsCollege/beta500 --gpu 0
-```
-The test errors will be saved to a text file under `./results/posenet/KingsCollege/beta500/`.
+- Download a dataset composed of:
+  - a directory containing point clouds
+  - a text file containing the poses of each point cloud
 
-### PoseLSTM train/test
-- Train a model:
+- Train a model
 ```bash
-python train.py --model poselstm --dataroot ./datasets/KingsCollege --name poselstm/KingsCollege/beta500 --beta 500 --niter 1200 --gpu 0
-```
-- Test the model:
-```bash
-python test.py --model poselstm --dataroot ./datasets/KingsCollege --name poselstm/KingsCollege/beta500 --gpu 0
+python3 train.py --dataroot <path_of_your_dataset>
 ```
 
-### Initialize the network with the pretrained googlenet trained on the Places dataset
-If you would like to initialize the network with the pretrained weights, download the places-googlenet.pickle file under the *pretrained_models/* folder:
-``` bash
-wget https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/places-googlenet.pickle
-```
-### Optimization scheme and loss weights
-* We use the training scheme defined in [PoseLSTM](https://arxiv.org/abs/1611.07890)
-* Note that mean subtraction **is not used** in PoseLSTM models
-* Results can be improved with a hyper-parameter search
+You can add several options to choose the number of points per point cloud, the model used (PointNet based or PointCNN based), how to split the dataset, etc.
 
-| Dataset       | beta | PoseNet (CAFFE) | PoseNet | PoseLSTM (TF) | PoseLSTM |
-| ------------- |:----:| :----: | :----: | :----: | :----: |
-| King's College  | 500  | 1.92m 5.40° | [1.19m 4.51°](https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/posenet/KingsCollege.zip) | 0.99m 3.65° | [0.90m 3.96°](https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/poselstm/KingsCollege.zip)|
-| Old Hospital   | 1500 | 2.31m 5.38° | [1.91m 4.05°](https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/posenet/OldHospital.zip) | 1.51m 4.29° | [1.79m 4.28°](https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/poselstm/OldHospital.zip)|
-| Shop Façade    | 100  | 1.46m 8.08° | [1.30m 8.13°](https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/posenet/ShopFacade.zip) | 1.18m 7.44° | [0.98m 6.20°](https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/poselstm/ShopFacade.zip)|
-| St Mary's Church | 250  | 2.65m 8.48° | [1.89m 7.27°](https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/posenet/StMarysChurch.zip) | 1.52m 6.68° | [1.68m 6.41°](https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/poselstm/StMarysChurch.zip) |
+Each run of `train.py` creates a new experiment whose checkpoints are stored into folder `checkpoints/<name_of_experiment>`. You can specify the name of the experiment with option `--name`. Otherwise the name of the experiment is by default `<model>/<datetime>`.
+
+#### Continue training
+
+You can interrupt the training of a model and continue it later. In order to do so, type the following:
+```bash
+python3 train.py --continue --name <name>
+```
+where `<name>` is the name of the experiment you want to keep on training. Options of the previous training are automatically loaded, so you do not have to specify again the model, number of points per point cloud, etc.
+
+### Test a model
+
+- Evaluate a specific model
+```bash
+python3 test.py --name <name>
+```
+
+Also here, the options provided during training phase are stored so that you do not have to specify them again.
+
+#### Splitting dataset
+
+Option `--split <n>` during training splits your dataset into a training set and a validation set by loading only one frame over `<n>`.
+
+Then, during test phase, add `--phase val` to test your model only on the validation set or `--phase retrain` to test only on your training set. By default, testing is done on the whole dataset.
 
 ## Citation
 ```
@@ -78,6 +70,31 @@ wget https://vision.in.tum.de/webarchive/hazirbas/poselstm-pytorch/places-google
   eprint = {1611.07890},
   url = {https://github.com/NavVisResearch/NavVis-Indoor-Dataset},
 }
+@article{PointNet,
+title = {{PointNet: Deep learning on point sets for 3D classification and segmentation}},
+author = {Qi, Charles R. and Su, Hao and Mo, Kaichun and Guibas, Leonidas J.},
+journal = {Proceedings - 30th IEEE Conference on Computer Vision and Pattern Recognition, CVPR 2017},
+year = {2017}
+doi = {10.1109/CVPR.2017.16},
+eprint = {1612.00593},
+url = {http://arxiv.org/abs/1612.00593},
+}
+@article{PointNet++,
+title = {{PointNet++: Deep Hierarchical Feature Learning on Point Sets in a Metric Space}},
+author = {Qi, Charles R. and Yi, Li and Su, Hao and Guibas, Leonidas J.},
+journal = {CoRR},
+year = {2017}
+eprint = {1706.02413},
+url = {http://arxiv.org/abs/1706.02413},
+}
+@article{PointCNN,
+title = {{PointCNN: Convolution On {\$}\backslashmathcal{\{}X{\}}{\$}-Transformed Points}},
+author = {Li, Yangyan and Bu, Rui and Sun, Mingchao and Wu, Wei and Di, Xinhan and Chen, Baoquan},
+journal = {CoRR},
+year = {2018}
+eprint = {1801.07791},
+url = {http://arxiv.org/abs/1801.07791},
+}
 ```
 ## Acknowledgments
-Code is inspired by [pytorch-CycleGAN-and-pix2pix]((https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix)).
+Code is inspired by [poselstm-pytorch](https://github.com/hazirbas/poselstm-pytorch).

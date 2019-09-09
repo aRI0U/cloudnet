@@ -85,13 +85,3 @@ class CloudCNN(Net):
         # normalize quaterions
         output = torch.cat((x[...,:3], F.normalize(x[...,3:], p=2, dim=-1)), dim=-1)
         return output
-
-
-if __name__ == '__main__':
-    import torch
-    net = CloudCNN(6, 4, 8)
-    input = torch.tensor(
-        [[[-1.,1,0],[0,1,0],[1,1,0],
-        [-1,0,0],[0,0,0],[1,0,0],
-        [-1,-1,0],[-1,1,0]]]).cuda()
-    net(input)
